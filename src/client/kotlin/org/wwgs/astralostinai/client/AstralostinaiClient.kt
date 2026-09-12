@@ -1,0 +1,229 @@
+package org.wwgs.astralostinai.client
+
+import net.fabricmc.api.ClientModInitializer
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
+import net.fabricmc.loader.api.FabricLoader
+import net.minecraft.client.MinecraftClient
+import net.minecraft.registry.Registries
+import net.minecraft.util.math.BlockPos
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.nio.file.Files
+import java.time.Duration
+import java.util.UUID
+import org.slf4j.LoggerFactory
+
+class AstralostinaiClient : ClientModInitializer {
+    private val gson = Gson()
+    private val logger = LoggerFactory.getLogger("AstraBridge")
+    private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build()
+    private var session = UUID.randomUUID().toString()
+    private var lastWorld: net.minecraft.client.world.ClientWorld? = null
+    private var busy = false
+    private var tick = 0
+    private var remaining = 0
+    private var activeId: String? = null
+    private var result: Map<String, Any>? = null
+    private var mining: MiningController? = null
+    private var navigation: NavigationController? = null
+    private var lastError = 0L
+    private lateinit var config: JsonObject
+    override fun onInitializeClient() {
+        val path = FabricLoader.getInstance().configDir.resolve("astralostinai-bridge.json")
+        if (!Files.exists(path)) {
+            Files.writeString(path, """{"enabled":false,"url":"http://127.0.0.1:8765","token":""}""")
+        }
+        config = gson.fromJson(Files.readString(path), JsonObject::class.java)
+        if (!config.get("enabled").asBoolean) {
+            logger.info("AI bridge disabled; configure {}", path)
+            return
+        }
+        require(config.get("token").asString.length >= 32) { "Bridge token must have at least 32 characters" }
+        ClientTickEvents.START_CLIENT_TICK.register { client ->
+            if (mining != null) {
+                if (!isReady(client)) release(client, "cancelled")
+                else {
+                    val outcome = mining!!.tick()
+                    if (outcome != null) {
+                        result = outcome
+                        mining = null
+                        activeId = null
+                    }
+                }
+            }
+            if (navigation != null) {
+                if (!isReady(client)) release(client, "cancelled")
+                else {
+                    val outcome = navigation!!.tick()
+                    if (outcome != null) {
+                        result = outcome
+                        navigation = null
+                        activeId = null
+                    }
+                }
+            }
+        }
+        ClientTickEvents.END_CLIENT_TICK.register { client -> onTick(client) }
+    }
+
+    private fun isReady(client: MinecraftClient) = client.player != null && client.world != null &&
+        client.currentScreen == null && !client.isPaused && client.player!!.isAlive &&
+        client.interactionManager?.currentGameMode?.name == "SURVIVAL"
+
+    private fun release(client: MinecraftClient, status: String) {
+        if (activeId == null) return
+        client.options.forwardKey.isPressed = false
+        client.options.backKey.isPressed = false
+        client.options.leftKey.isPressed = false
+        client.options.rightKey.isPressed = false
+        client.options.jumpKey.isPressed = false
+        result = mining?.finish(status, "control_interrupted")
+            ?: navigation?.finish(status, "control_interrupted")
+            ?: mapOf("id" to activeId!!, "status" to status)
+        mining = null
+        navigation = null
+        activeId = null
+        remaining = 0
+    }
+
+    private fun onTick(client: MinecraftClient) {
+        if (client.world !== lastWorld) {
+            release(client, "cancelled")
+            lastWorld = client.world
+            session = UUID.randomUUID().toString()
+        }
+        val ready = isReady(client)
+        if (!ready) release(client, "cancelled")
+        else if (remaining > 0 && --remaining == 0) release(client, "completed")
+        if (++tick % 5 != 0 || busy) return
+        val player = client.player
+        val world = client.world
+        val state = linkedMapOf<String, Any?>(
+            "session" to session, "protocol" to 1, "ready" to ready,
+            "busy" to (activeId != null), "result" to result
+        )
+        state["capabilities"] = listOf("move", "look", "stop", "mine", "approach", "collect")
+        state["activeAction"] = mining?.progress() ?: navigation?.progress()
+        if (player != null && world != null) {
+            state["player"] = mapOf(
+                "position" to listOf(player.x, player.y, player.z),
+                "yaw" to player.yaw, "pitch" to player.pitch, "health" to player.health,
+                "food" to player.hungerManager.foodLevel,
+                "dimension" to world.registryKey.value.toString(),
+                "selectedSlot" to player.inventory.selectedSlot,
+                "mainHand" to mapOf("item" to Registries.ITEM.getId(player.mainHandStack.item).toString(),
+                    "count" to player.mainHandStack.count, "damage" to player.mainHandStack.damage,
+                    "maxDamage" to player.mainHandStack.maxDamage),
+                "inventory" to (0 until player.inventory.size()).mapNotNull { slot ->
+                    val stack = player.inventory.getStack(slot)
+                    if (stack.isEmpty) null else mapOf("slot" to slot, "item" to Registries.ITEM.getId(stack.item).toString(), "count" to stack.count)
+                }
+            )
+            state["environment"] = EnvironmentObserver.capture(client)
+        }
+        // Leave room below the bridge's 64 KiB request limit, even in unusual modded worlds.
+        if (gson.toJson(state).toByteArray(Charsets.UTF_8).size > 60_000) {
+            state["environment"] = mapOf("schema" to 1, "available" to false, "reason" to "payload_limit")
+        }
+        val sentResult = result
+        val sentPlayer = player
+        val sentWorld = world
+        val started = System.nanoTime()
+        val request = HttpRequest.newBuilder(URI.create(config.get("url").asString + "/v1/tick"))
+            .timeout(Duration.ofSeconds(2))
+            .header("Authorization", "Bearer " + config.get("token").asString)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(state))).build()
+        busy = true
+        http.sendAsync(request, HttpResponse.BodyHandlers.ofString()).whenComplete { response, error ->
+            client.execute {
+                busy = false
+                try {
+                    check(error == null && response.statusCode() == 200) { "Bridge request failed" }
+                    if (result == sentResult) result = null
+                    val body = gson.fromJson(response.body(), JsonObject::class.java)
+                    val command = body.getAsJsonObject("command") ?: return@execute
+                    val id = command.get("id").asString
+                    if (System.nanoTime() - started > 2_000_000_000L || client.player !== sentPlayer ||
+                        client.world !== sentWorld || client.currentScreen != null || client.isPaused ||
+                        !isReady(client) || !ready) {
+                        result = mapOf("id" to id, "status" to "cancelled")
+                        return@execute
+                    }
+                    apply(client, command)
+                } catch (e: Exception) {
+                    release(client, "cancelled")
+                    if (System.currentTimeMillis() - lastError > 10_000) {
+                        logger.warn("Bridge unavailable or invalid response: {}", e.message)
+                        lastError = System.currentTimeMillis()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun apply(client: MinecraftClient, command: JsonObject) {
+        val id = command.get("id").asString
+        val action = command.getAsJsonObject("action")
+        when (action.get("type").asString) {
+            "approach", "collect" -> {
+                require(activeId == null)
+                val collect = action.get("type").asString == "collect"
+                val controller = NavigationController(client, id, action.get("timeoutTicks").asInt,
+                    blockTarget = if (collect) null else BlockPos(action.get("x").asInt, action.get("y").asInt, action.get("z").asInt),
+                    entityId = if (collect) action.get("entityId").asInt else null)
+                val rejection = controller.begin()
+                if (rejection != null) result = rejection
+                else {
+                    navigation = controller
+                    activeId = id
+                }
+            }
+            "mine" -> {
+                require(activeId == null)
+                val controller = MiningController(client, id, BlockPos(
+                    action.get("x").asInt, action.get("y").asInt, action.get("z").asInt
+                ), action.get("timeoutTicks").asInt)
+                val rejection = controller.begin()
+                if (rejection != null) result = rejection
+                else {
+                    mining = controller
+                    activeId = id
+                }
+            }
+            "stop" -> {
+                release(client, "cancelled")
+                result = mapOf("id" to id, "status" to "completed")
+            }
+            "look" -> {
+                val yaw = action.get("yaw").asFloat
+                val pitch = action.get("pitch").asFloat
+                require(yaw.isFinite() && pitch.isFinite())
+                client.player!!.yaw = yaw.coerceIn(-180f, 180f)
+                client.player!!.pitch = pitch.coerceIn(-90f, 90f)
+                result = mapOf("id" to id, "status" to "completed")
+            }
+            "move" -> {
+                require(activeId == null)
+                val duration = action.get("ticks").asInt
+                require(duration in 1..20)
+                val key = when (action.get("direction").asString) {
+                    "forward" -> client.options.forwardKey
+                    "back" -> client.options.backKey
+                    "left" -> client.options.leftKey
+                    "right" -> client.options.rightKey
+                    "jump" -> client.options.jumpKey
+                    else -> error("Invalid direction")
+                }
+                activeId = id
+                remaining = duration
+                key.isPressed = true
+            }
+            else -> result = mapOf("id" to id, "status" to "rejected")
+        }
+    }
+}

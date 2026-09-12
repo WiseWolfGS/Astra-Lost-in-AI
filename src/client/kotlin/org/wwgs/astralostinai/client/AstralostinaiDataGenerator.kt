@@ -1,0 +1,11 @@
+package org.wwgs.astralostinai.client
+
+import net.fabricmc.fabric.api.datagen.v1.DataGeneratorEntrypoint
+import net.fabricmc.fabric.api.datagen.v1.FabricDataGenerator
+
+class AstralostinaiDataGenerator : DataGeneratorEntrypoint {
+
+    override fun onInitializeDataGenerator(fabricDataGenerator: FabricDataGenerator) {
+        val pack = fabricDataGenerator.createPack()
+    }
+}
