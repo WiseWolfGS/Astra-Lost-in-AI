@@ -48,12 +48,12 @@ GitHub 실행의 Artifacts에서 다음 자료를 7일간 받을 수 있다.
 일반적인 실패에서도 로그 회수와 정리를 시도한다. 프로세스 강제 종료나 Docker 엔진 중단은 수동 정리가 필요할 수 있다.
 Python 보고서는 Docker cp로 회수할 수 있도록 /tmp에 기록한다. 합성 에피소드용 /data는 메모리 마운트다.
 
-## 검증 상태와 첫 GitHub 실행
+## 검증 상태
 
-로컬 Fabric build 성공(Java 20개 테스트 기준선), Python 56개·Node 10개 및 합성 연결 시험 통과.
+로컬 Fabric build 성공(Java 27개), Python 88개·Node 18개 및 합성 연결·취소 확인 시험 통과.
 보고서 생성·회수와 테스트 환경 정리까지 검증했으며 actionlint로 워크플로 구문을 확인했다.
 Linux용 wrapper 줄바꿈은 .gitattributes에서 LF로 고정하고 bash로 실행한다.
 
-GitHub 호스팅 CI는 아직 실행하지 않았다. 이번 파일들을 Commit/Push한 뒤 Actions의 CI에서
-두 작업의 성공 여부와 보고서를 확인한다. YAML 파일을 만든 사실과 원격 실행 성공을 구분한다.
+2026-09-12 사용자가 이전 커밋의 GitHub 호스팅 CI 두 작업과 보고서의 성공을 확인했다.
+이번 취소·스킬 등록·재탐색 변경의 원격 결과는 다음 Commit/Push 후 별도로 확인한다.
 새 컴퓨터에서의 실제 게임 설치·실게임 행동 검증 역시 이 자동 테스트에 포함되지 않는다.

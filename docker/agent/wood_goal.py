@@ -18,7 +18,11 @@ def inventory(observation):
                if stack.get("item") in LOGS)
 
 
-def choose(observation):
+def candidate_key(action):
+    return (action["type"], action.get("entityId"), action.get("x"), action.get("y"), action.get("z"))
+
+
+def choose(observation, excluded=frozenset(), collect_only=False):
     """Choose only bounded observed candidates; Fabric validates the actual path."""
     summary = summarize(observation)
     if not summary["available"]:
@@ -29,11 +33,14 @@ def choose(observation):
     drops = [entity for entity in summary["entities"]
              if entity.get("type") == "minecraft:item" and entity.get("item") in LOGS
              and entity.get("onGround") and entity.get("lineOfSight")
+             and ("collect", entity["id"], None, None, None) not in excluded
              and distance(entity["position"]) <= 4
              and abs(entity["position"][1] - position[1]) <= 0.5]
     if drops:
         return {"type": "collect", "entityId": min(drops, key=lambda e: distance(e["position"]))["id"],
                 "timeoutTicks": 200}
+    if collect_only:
+        raise GoalHalt("no_local_log_or_drop")
     terrain = observation["environment"]["terrain"]
     origin, palette = terrain["origin"], terrain["palette"]
     blocks = []
@@ -44,7 +51,7 @@ def choose(observation):
         # Never mine the supporting floor or select logs high in a canopy.
         if math.floor(position[1]) <= pos[1] <= math.floor(position[1]) + 2:
             d = distance([pos[0] + .5, pos[1], pos[2] + .5])
-            if d <= 4:
+            if d <= 4 and ("approach", None, *pos) not in excluded:
                 blocks.append((d, pos))
     if not blocks:
         raise GoalHalt("no_local_log_or_drop")
@@ -53,13 +60,17 @@ def choose(observation):
 
 
 class WoodGoal:
-    def __init__(self, observe, execute, record, max_actions):
+    def __init__(self, observe, execute, record, max_actions, check_cancel=lambda: None):
         self.observe, self.execute = observe, execute
         self.record, self.max_actions = record, max_actions
         self.before = None
         self.current = None
+        self.check_cancel = check_cancel
+        self.excluded = set()
+        self.retries = 0
 
     def check(self, snapshot):
+        self.check_cancel()
         obs = snapshot.get("observation") or {}
         if not snapshot.get("connected") or not obs.get("ready") or obs.get("busy"):
             raise GoalHalt("world_not_ready")
@@ -92,11 +103,13 @@ class WoodGoal:
         return delta >= 1
 
     async def action(self, action):
+        self.check_cancel()
         if len(self.record["steps"]) >= self.max_actions:
             raise GoalHalt("action_budget_exhausted")
         entry = {"action": action, "before": self.current}
         self.record["steps"].append(entry)
         entry["result"] = await self.execute(action, self.current)
+        self.check_cancel()
         if entry["result"].get("status") != "completed":
             raise GoalHalt("action_" + entry["result"].get("status", "unknown"))
         # A result and its observation may arrive in adjacent heartbeats. Wait for
@@ -105,6 +118,34 @@ class WoodGoal:
         self.check(baseline)
         await self.fresh(baseline["observedAt"])
 
+    async def candidate_action(self, action):
+        try:
+            await self.action(action)
+            return action
+        except GoalHalt as exc:
+            last = self.record["steps"][-1].get("result", {}) if self.record["steps"] else {}
+            if (str(exc) != "action_rejected" or last.get("reason") != "no_flat_path"
+                    or self.retries >= 1 or len(self.record["steps"]) >= self.max_actions):
+                raise
+            # Retry only a pre-execution path rejection. Cancellation, damage,
+            # session changes and timeouts never enter this branch.
+            self.excluded.add(candidate_key(action))
+            self.retries += 1
+            baseline = await self.observe()
+            self.check(baseline)
+            await self.fresh(baseline["observedAt"])
+            if self.gained():
+                return action
+            try:
+                replacement = choose(self.current["observation"], self.excluded,
+                                     collect_only=action["type"] == "collect")
+            except GoalHalt:
+                raise GoalHalt("no_alternative_candidate") from None
+            self.record.setdefault("replans", []).append({"reason": "no_flat_path",
+                "rejected": action, "replacement": replacement})
+            await self.action(replacement)
+            return replacement
+
     async def run(self):
         self.current = await self.observe()
         self.check(self.current)
@@ -112,7 +153,7 @@ class WoodGoal:
         self.record["before"] = self.before
         self.record["initialLogCount"] = inventory(self.before["observation"])
         action = choose(self.current["observation"])
-        await self.action(action)
+        action = await self.candidate_action(action)
         if self.gained():
             return
         if action["type"] == "collect":
@@ -130,12 +171,12 @@ class WoodGoal:
         for _ in range(12):
             candidate = None
             try:
-                candidate = choose(self.current["observation"])
+                candidate = choose(self.current["observation"], self.excluded)
             except GoalHalt as exc:
                 if str(exc) != "no_local_log_or_drop":
                     raise
             if candidate and candidate["type"] == "collect":
-                await self.action(candidate)
+                await self.candidate_action(candidate)
                 if self.gained():
                     return
                 raise GoalHalt("inventory_gain_not_observed")

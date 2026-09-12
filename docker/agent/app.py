@@ -3,16 +3,20 @@ import asyncio
 import hmac
 import json
 import os
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, ConfigDict, Field
 from perception import summarize, planner_observation
-from wood_goal import WoodGoal, GoalHalt
+from wood_goal import GoalHalt
+from skills import SKILLS, WOOD, WoodInputs, check_skill
 
 TOKEN = os.environ["BRIDGE_TOKEN"]
 BRIDGE = os.getenv("BRIDGE_URL", "http://bridge:8765")
@@ -22,6 +26,46 @@ DATA = Path(os.getenv("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 app = FastAPI(title="AstraLostInAI", version="0.1.0")
 step_lock = asyncio.Lock()
+ACTIVE_STATUSES = ("queued", "running", "cancelling")
+
+class ExecutionCancelled(Exception):
+    pass
+
+@dataclass
+class Execution:
+    mode: str
+    id: str = field(default_factory=lambda: str(uuid4()))
+    cancel_requested: bool = False
+    finished: bool = False
+    action_id: str | None = None
+    action_result: dict | None = None
+    dispatch_pending: bool = False
+
+    def check(self):
+        if self.cancel_requested:
+            raise ExecutionCancelled()
+
+    def snapshot(self):
+        return {"id": self.id, "mode": self.mode, "cancelRequested": self.cancel_requested,
+                "finished": self.finished, "actionId": self.action_id,
+                "actionResult": self.action_result, "dispatchPending": self.dispatch_pending}
+
+execution_context = ContextVar("execution", default=None)
+executions: dict[str, Execution] = {}
+
+@asynccontextmanager
+async def execution_scope(mode):
+    async with step_lock:
+        control = Execution(mode)
+        executions[control.id] = control
+        while len(executions) > 100:
+            del executions[next(iter(executions))]
+        context_token = execution_context.set(control)
+        try:
+            yield control
+        finally:
+            control.finished = True
+            execution_context.reset(context_token)
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -66,8 +110,11 @@ class DirectAction(StrictModel):
 class Step(StrictModel):
     goal: str = Field(default="주변을 관찰하고 안전한 다음 행동을 정한다.", max_length=2000)
 
-class WoodRequest(StrictModel):
-    max_actions: int = Field(default=3, ge=1, le=3, strict=True)
+WoodRequest = WoodInputs
+
+class SkillRequest(StrictModel):
+    version: str
+    inputs: dict = Field(default_factory=dict)
 
 async def authorize(authorization: Annotated[str | None, Header()] = None):
     if not hmac.compare_digest(authorization or "", "Bearer " + TOKEN):
@@ -100,11 +147,74 @@ async def perceive():
             "perception": summarize(snapshot.get("observation") or {})}
 
 def record_episode(record):
+    control = execution_context.get()
+    if control:
+        record = {**record, "executionId": control.id, "cancelRequested": control.cancel_requested}
     with (DATA / "episodes.jsonl").open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(record, ensure_ascii=False) + "\n")
     return record
 
+async def cancel_and_wait(action_id):
+    result = {"id": action_id, "status": "cancelling", "cancelConfirmed": False}
+    try:
+        async with asyncio.timeout(8):
+            result = await bridge("POST", f"/v1/actions/{action_id}/cancel", {})
+            while result.get("status") in ACTIVE_STATUSES:
+                await asyncio.sleep(.25)
+                result = await bridge("GET", f"/v1/actions/{action_id}")
+    except (HTTPException, TimeoutError) as exc:
+        result = {**result, "cancelConfirmed": False,
+                  "cancelError": "confirmation_unavailable",
+                  "httpStatus": exc.status_code if isinstance(exc, HTTPException) else 504}
+    return result
+
+@app.get("/v1/execution", dependencies=[Depends(authorize)])
+async def current_execution():
+    current = next((control for control in executions.values() if not control.finished), None)
+    return {"execution": current.snapshot() if current else None}
+
+@app.get("/v1/executions/{execution_id}", dependencies=[Depends(authorize)])
+async def execution_status(execution_id: UUID):
+    control = executions.get(str(execution_id))
+    if control is None:
+        raise HTTPException(404, "unknown execution")
+    return control.snapshot()
+
+@app.post("/v1/executions/{execution_id}/cancel", dependencies=[Depends(authorize)])
+async def cancel_execution(execution_id: UUID):
+    control = executions.get(str(execution_id))
+    if control is None:
+        raise HTTPException(404, "unknown execution")
+    if not control.finished:
+        # Set before awaiting: this blocks a new action between two goal steps,
+        # or after a model response. It deliberately bypasses the execution lock.
+        control.cancel_requested = True
+        if control.action_id:
+            action_id = control.action_id
+            result = await cancel_and_wait(action_id)
+            if control.action_id == action_id:
+                control.action_result = result
+    return control.snapshot()
+
+@app.get("/v1/actions/{action_id}", dependencies=[Depends(authorize)])
+async def action_status(action_id: UUID):
+    return await bridge("GET", f"/v1/actions/{action_id}")
+
+@app.post("/v1/actions/{action_id}/cancel", dependencies=[Depends(authorize)])
+async def cancel_action(action_id: UUID):
+    # Exact action cancellation also prevents its owning goal from chaining.
+    for control in executions.values():
+        if not control.finished and control.action_id == str(action_id):
+            control.cancel_requested = True
+    return await cancel_and_wait(str(action_id))
+
 async def execute_action(action, before):
+    control = execution_context.get()
+    def cancelled_before_dispatch():
+        return {"status":"cancelled", "reason":"execution_cancelled_before_dispatch",
+                "cancelConfirmed":True, "confirmation":"never_dispatched"}
+    if control and control.cancel_requested:
+        return cancelled_before_dispatch()
     current = await observe()
     if (not current["connected"] or not current["observation"].get("ready") or
         current["observation"]["session"] != before["observation"]["session"] or
@@ -114,32 +224,94 @@ async def execute_action(action, before):
     timed = action.type in ("mine", "approach", "collect")
     if timed and action.type not in current["observation"].get("capabilities", []):
         raise HTTPException(409, "Restart Minecraft with support for " + action.type)
+    if control and control.cancel_requested:
+        return cancelled_before_dispatch()
+    if control:
+        control.action_id = None
+        control.action_result = None
+        control.dispatch_pending = True
     queued = await bridge("POST", "/v1/actions", action.model_dump())
+    if control:
+        control.dispatch_pending = False
+        control.action_id = queued["id"]
     checks = 4 * (action.timeoutTicks // 20 + 10) if timed else 32
     result = queued
-    for _ in range(checks):
-        await asyncio.sleep(0.25)
-        result = await bridge("GET", "/v1/actions/" + queued["id"])
-        if result["status"] not in ("queued", "running"):
-            break
+    cancellation_attempted = False
+    try:
+        for _ in range(checks):
+            if control and control.cancel_requested:
+                cancellation_attempted = True
+                result = await cancel_and_wait(queued["id"])
+                break
+            await asyncio.sleep(0.25)
+            result = await bridge("GET", "/v1/actions/" + queued["id"])
+            if result["status"] not in ACTIVE_STATUSES:
+                break
+    finally:
+        # Timeout/error cleanup targets the known ID; a normal stop cannot
+        # preempt the busy action queue. Never claim success without feedback.
+        if result.get("status") in ACTIVE_STATUSES and not cancellation_attempted:
+            result = await cancel_and_wait(queued["id"])
+        if control:
+            control.action_result = result
     return result
 
 @app.post("/v1/goals/wood", dependencies=[Depends(authorize)])
 async def wood(request: WoodRequest):
     """Explicit model-free skill, executes like /v1/act even with DRY_RUN=true."""
+    return await run_skill(WOOD, request)
+
+def registered_skill(skill_id):
+    skill = SKILLS.get(skill_id)
+    if skill is None:
+        raise HTTPException(404, "unknown skill")
+    return skill
+
+@app.get("/v1/skills", dependencies=[Depends(authorize)])
+async def list_skills():
+    return {"skills": [skill.describe() for skill in SKILLS.values()]}
+
+@app.get("/v1/skills/{skill_id}", dependencies=[Depends(authorize)])
+async def skill_detail(skill_id: str):
+    return registered_skill(skill_id).describe()
+
+@app.get("/v1/skills/{skill_id}/check", dependencies=[Depends(authorize)])
+async def skill_check(skill_id: str):
+    skill = registered_skill(skill_id)
+    return check_skill(skill, await observe())
+
+@app.post("/v1/skills/{skill_id}/run", dependencies=[Depends(authorize)])
+async def skill_run(skill_id: str, request: SkillRequest):
+    from pydantic import ValidationError
+    skill = registered_skill(skill_id)
+    if request.version != skill.version:
+        raise HTTPException(409, "unsupported skill version")
+    try:
+        inputs = skill.inputs.model_validate(request.inputs)
+    except ValidationError:
+        raise HTTPException(422, "invalid skill inputs") from None
+    return await run_skill(skill, inputs)
+
+async def run_skill(skill, request):
     if step_lock.locked():
         raise HTTPException(409, "step already in progress")
-    async with step_lock:
-        record = {"id": str(uuid4()), "mode": "wood_goal", "model_called": False,
-                  "dry_run": False, "goal": "increase_log_inventory_by_one",
-                  "max_actions": request.max_actions, "timeoutSeconds": 60, "steps": []}
+    async with execution_scope(skill.id) as control:
+        record = {"id": str(uuid4()), "mode": skill.id + "_goal", "model_called": False,
+                  "dry_run": False, "goal": skill.goal,
+                  "max_actions": request.max_actions, "timeoutSeconds": skill.timeout_seconds, "steps": [],
+                  "skill": {"id": skill.id, "version": skill.version,
+                            "inputs": request.model_dump()}, "observationSchemaVersion": None}
         async def dispatch(action, before):
             return await execute_action(DirectAction(action=action).action, before)
-        runner = WoodGoal(observe, dispatch, record, request.max_actions)
+        runner = skill.runner(observe, dispatch, record, request.max_actions, control.check)
         try:
-            async with asyncio.timeout(60):
+            async with asyncio.timeout(skill.timeout_seconds):
                 await runner.run()
-            record["result"] = {"status": "completed", "reason": "log_inventory_increased"}
+            if not skill.verify(record):
+                raise GoalHalt("success_evidence_missing")
+            record["result"] = {"status": "completed", "reason": skill.success_reason}
+        except ExecutionCancelled:
+            record["result"] = {"status": "cancelled", "reason": "execution_cancel_requested"}
         except GoalHalt as exc:
             record["result"] = {"status": "stopped", "reason": str(exc)}
             if record["steps"] and str(exc).startswith("action_"):
@@ -152,20 +324,12 @@ async def wood(request: WoodRequest):
             record["result"] = {"status": "stopped", "reason": "bridge_or_state_error",
                                 "httpStatus": exc.status_code}
         finally:
-            # An HTTP/polling timeout does not prove that a queued action stopped.
-            # Request stop only for an uncertain action in the original session.
+            record["observationSchemaVersion"] = (record.get("before") or {}).get(
+                "observation", {}).get("environment", {}).get("schema")
             steps = record["steps"]
-            if steps and steps[-1].get("result", {}).get("status", "running") in ("queued", "running"):
-                try:
-                    async with asyncio.timeout(8):
-                        snapshot = await observe()
-                        if (snapshot.get("connected") and runner.before and
-                                snapshot["observation"]["session"] == runner.before["observation"]["session"]):
-                            record["stopRequest"] = await bridge("POST", "/v1/actions", {"type": "stop"})
-                        else:
-                            record["stopRequest"] = {"status": "skipped", "reason": "session_unavailable"}
-                except (HTTPException, TimeoutError):
-                    record["stopRequest"] = {"status": "unconfirmed"}
+            if steps and (control.cancel_requested or steps[-1].get("result", {}).get("status", "running") in ACTIVE_STATUSES):
+                record["cancellation"] = control.action_result or {
+                    "cancelConfirmed":False, "reason":"action_id_unavailable"}
         return record_episode(record)
 
 @app.post("/v1/act", dependencies=[Depends(authorize)])
@@ -173,7 +337,7 @@ async def act(request: DirectAction):
     """Explicit manual action: no model call, executes independently of DRY_RUN."""
     if step_lock.locked():
         raise HTTPException(409, "step already in progress")
-    async with step_lock:
+    async with execution_scope("direct"):
         before = await observe()
         if not before["connected"] or not before["observation"].get("ready"):
             raise HTTPException(409, "Enter an unpaused survival world first")
@@ -186,7 +350,7 @@ async def act(request: DirectAction):
 async def step(request: Step):
     if step_lock.locked():
         raise HTTPException(409, "step already in progress")
-    async with step_lock:
+    async with execution_scope("step"):
         before = await observe()
         if not before["connected"] or not before["observation"].get("ready"):
             raise HTTPException(409, "Enter an unpaused survival world first")

@@ -140,7 +140,7 @@ docker compose exec -T agent tail -n 1 /data/episodes.jsonl
 ```
 
 plan.action이 collect이고 동일한 수집 증거를 반환하는지 확인한다.
-대상이 없다면 다시 드롭을 준비한다. 아직 여러 행동을 자동 연결하는 반복 루프는 없다.
+대상이 없다면 다시 드롭을 준비한다. 여러 행동을 연결하는 제한된 목표는 [wood 스킬](WOOD_GOAL.md)을 사용한다.
 
 ## 결과 해석과 다음 단계
 
@@ -156,9 +156,9 @@ plan.action이 collect이고 동일한 수집 증거를 반환하는지 확인�
 | stuck / navigation_timeout | 정체 또는 실행 예산 초과 |
 | pickup_verified | 대상 이벤트와 인벤토리 증가를 함께 확인 |
 
-최신 검증: Fabric 빌드, Java 20개/Python 56개 테스트 통과.
-Node 10개는 직전 변경에서 통과했으며 이후 Node 코드 변경은 없다.
-[원목 획득 실행 루프](WOOD_GOAL.md)도 구현했으며 개별 행동 실패 시 중단한다.
+최신 검증 기준선은 [진행 상태](PROGRESS.md)를 따른다.
+[wood 스킬](WOOD_GOAL.md)은 실행 전 no_flat_path 거절에 한해 예산 안에서 다른 후보를 한 번 선택한다.
+수집의 인접 정지 위치 재탐색과 details.search 진단은 [수집 경로 수정](COLLECTION_PATH_FIX.md)을 따른다.
 
 후속 오류 수정과 실게임 재검증: [원인·수정·검증 보고서](NAVIGATION_FIX.md).
 과도한 0.15블록 충돌 여유 폭과 경유점 감속 누락을 수정했다.

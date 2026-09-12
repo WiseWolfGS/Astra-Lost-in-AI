@@ -82,7 +82,8 @@ smoke Compose는 별도 프로젝트·네트워크, 메모리 데이터 디렉�
 통합 시 두 이미지 빌드, Python 56개·Node 10개 테스트, 합성 관측→dry-run 기록→행동 전달→완료 응답을 확인했다.
 setup의 신규 생성·토큰 일치·기존 파일 보존과 외부 EnvFile 사용도 확인했다.
 Fabric 게임 코드는 이번 통합에서 변경하지 않았고 이전 Java 20개 테스트 결과를 유지한다.
-CI 워크플로와 공통 실행 스크립트를 추가했다. GitHub 호스팅 실행 및 독립된 새 컴퓨터의 전체 설치는 후속 확인 사항이다.
+CI 워크플로와 공통 실행 스크립트를 추가했고 사용자가 이전 커밋의 GitHub CI 성공을 확인했다.
+독립된 새 컴퓨터의 전체 설치는 후속 확인 사항이다. 최신 검증 기준선은 [진행 상태](../docs/PROGRESS.md)를 따른다.
 
 ## 동작과 데이터
 
@@ -92,6 +93,7 @@ DRY_RUN과 무관하게 실제 게임 행동을 실행하며 모델을 호출하
 wood는 최대 3행동/60초다. log_inventory_increased와 inventoryDelta>=1을 성공 기준으로 사용한다.
 기본 출력은 결과 중심이며 -FullRecord로 원본 관측을 포함한다.
 실패 이유는 result.actionReason과 safetyFailure에서 확인한다.
+wood@1.0.0의 등록 목록·사전 조건·버전 지정 실행은 [스킬 문서](../docs/SKILLS.md)를 따른다.
 
 서비스는 loopback 8000/8765를 사용하며 health 이외 API에는 bearer 인증이 필요하다.
 에피소드는 운영 데이터 볼륨에 저장된다. 일반 down은 볼륨을 유지한다.

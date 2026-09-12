@@ -16,6 +16,7 @@ import java.nio.file.Files
 import java.time.Duration
 import java.util.UUID
 import org.slf4j.LoggerFactory
+import org.wwgs.astralostinai.CancellationTarget
 
 class AstralostinaiClient : ClientModInitializer {
     private val gson = Gson()
@@ -74,16 +75,21 @@ class AstralostinaiClient : ClientModInitializer {
         client.currentScreen == null && !client.isPaused && client.player!!.isAlive &&
         client.interactionManager?.currentGameMode?.name == "SURVIVAL"
 
-    private fun release(client: MinecraftClient, status: String) {
+    private fun release(client: MinecraftClient, status: String, reason: String = "control_interrupted") {
         if (activeId == null) return
         client.options.forwardKey.isPressed = false
         client.options.backKey.isPressed = false
         client.options.leftKey.isPressed = false
         client.options.rightKey.isPressed = false
         client.options.jumpKey.isPressed = false
-        result = mining?.finish(status, "control_interrupted")
-            ?: navigation?.finish(status, "control_interrupted")
-            ?: mapOf("id" to activeId!!, "status" to status)
+        client.options.sprintKey.isPressed = false
+        client.player?.isSprinting = false
+        val outcome = mining?.finish(status, reason)
+            ?: navigation?.finish(status, reason)
+            ?: mapOf("id" to activeId!!, "status" to status, "reason" to reason)
+        @Suppress("UNCHECKED_CAST")
+        val details = (outcome["details"] as? Map<String, Any>) ?: emptyMap()
+        result = outcome + ("details" to (details + ("inputsReleased" to true)))
         mining = null
         navigation = null
         activeId = null
@@ -106,8 +112,9 @@ class AstralostinaiClient : ClientModInitializer {
             "session" to session, "protocol" to 1, "ready" to ready,
             "busy" to (activeId != null), "result" to result
         )
-        state["capabilities"] = listOf("move", "look", "stop", "mine", "approach", "collect")
+        state["capabilities"] = listOf("move", "look", "stop", "mine", "approach", "collect", "cancel")
         state["activeAction"] = mining?.progress() ?: navigation?.progress()
+            ?: activeId?.let { mapOf("id" to it, "type" to "move", "remainingTicks" to remaining) }
         if (player != null && world != null) {
             state["player"] = mapOf(
                 "position" to listOf(player.x, player.y, player.z),
@@ -146,6 +153,15 @@ class AstralostinaiClient : ClientModInitializer {
                     check(error == null && response.statusCode() == 200) { "Bridge request failed" }
                     if (result == sentResult) result = null
                     val body = gson.fromJson(response.body(), JsonObject::class.java)
+                    val cancellation = body.getAsJsonObject("cancel")
+                    if (cancellation != null) {
+                        if (client.world === sentWorld && CancellationTarget.matches(
+                                cancellation.get("id")?.asString, cancellation.get("session")?.asString,
+                                activeId, session)) {
+                            release(client, "cancelled", "cancel_requested")
+                        }
+                        return@execute // Cancellation always takes priority; no command in this response.
+                    }
                     val command = body.getAsJsonObject("command") ?: return@execute
                     val id = command.get("id").asString
                     if (System.nanoTime() - started > 2_000_000_000L || client.player !== sentPlayer ||

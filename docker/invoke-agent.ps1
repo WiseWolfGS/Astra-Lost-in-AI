@@ -1,12 +1,16 @@
 param(
-    [ValidateSet('observe', 'perception', 'mine', 'approach', 'collect', 'wood', 'step', 'health')][string]$Operation = 'observe',
+    [ValidateSet('observe', 'perception', 'mine', 'approach', 'collect', 'wood', 'step', 'health', 'execution', 'cancel', 'skills', 'skill-check', 'skill-run')][string]$Operation = 'observe',
     [string]$Goal = '주변을 관찰하고 안전한 다음 행동을 정한다.',
     [ValidateRange(20,200)][int]$TimeoutTicks = 200,
     [ValidateRange(-1,2147483647)][int]$EntityId = -1,
     [string]$Item = '',
     [ValidateRange(1,3)][int]$MaxActions = 3,
     [switch]$FullRecord,
-    [string]$EnvFile = (Join-Path $PSScriptRoot '.env')
+    [string]$EnvFile = (Join-Path $PSScriptRoot '.env'),
+    [Guid]$ExecutionId = [Guid]::Empty,
+    [Guid]$ActionId = [Guid]::Empty,
+    [ValidatePattern('^[a-z][a-z0-9_-]*$')][string]$SkillId = 'wood',
+    [string]$SkillVersion = '1.1.0'
 )
 $ErrorActionPreference = 'Stop'
 if ($Operation -eq 'health') {
@@ -17,7 +21,41 @@ $tokenLine = Get-Content -LiteralPath $EnvFile |
     Where-Object { $_ -match '^BRIDGE_TOKEN=' } | Select-Object -First 1
 if (!$tokenLine) { throw 'Run setup.ps1 first' }
 $headers = @{Authorization = 'Bearer ' + $tokenLine.Substring('BRIDGE_TOKEN='.Length)}
-if ($Operation -eq 'observe' -or $Operation -eq 'perception') {
+if ($Operation -in @('skills','skill-check','skill-run')) {
+    $url = 'http://127.0.0.1:8000/v1/skills'
+    if ($Operation -eq 'skill-check') { $url += "/$SkillId/check" }
+    if ($Operation -eq 'skill-run') {
+        $body = @{version=$SkillVersion; inputs=@{max_actions=$MaxActions}} | ConvertTo-Json -Depth 5
+        Invoke-RestMethod "$url/$SkillId/run" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 90 | ConvertTo-Json -Depth 30
+    } else {
+        Invoke-RestMethod $url -Headers $headers -TimeoutSec 10 | ConvertTo-Json -Depth 20
+    }
+} elseif ($Operation -in @('execution','cancel')) {
+    if ($ExecutionId -ne [Guid]::Empty -and $ActionId -ne [Guid]::Empty) { throw 'Choose ExecutionId or ActionId, not both.' }
+    if ($ActionId -ne [Guid]::Empty) {
+        $url = "http://127.0.0.1:8000/v1/actions/$ActionId"
+        if ($Operation -eq 'cancel') {
+            Invoke-RestMethod ($url+'/cancel') -Method Post -Headers $headers -ContentType 'application/json' -Body '{}' -TimeoutSec 15 | ConvertTo-Json -Depth 20
+        } else {
+            Invoke-RestMethod $url -Headers $headers | ConvertTo-Json -Depth 20
+        }
+    } else {
+        if ($ExecutionId -eq [Guid]::Empty) {
+            $active = (Invoke-RestMethod 'http://127.0.0.1:8000/v1/execution' -Headers $headers).execution
+            if (!$active) { @{status='idle';message='No active execution.'} | ConvertTo-Json; return }
+            $ExecutionId = [Guid]$active.id
+        }
+        $url = "http://127.0.0.1:8000/v1/executions/$ExecutionId"
+        if ($Operation -eq 'cancel') {
+            $outcome = Invoke-RestMethod ($url+'/cancel') -Method Post -Headers $headers -ContentType 'application/json' -Body '{}' -TimeoutSec 15
+            for ($i=0; $i -lt 16 -and !$outcome.finished; $i++) {
+                Start-Sleep -Milliseconds 250
+                $outcome = Invoke-RestMethod $url -Headers $headers -TimeoutSec 5
+            }
+        } else { $outcome = Invoke-RestMethod $url -Headers $headers }
+        $outcome | ConvertTo-Json -Depth 20
+    }
+} elseif ($Operation -eq 'observe' -or $Operation -eq 'perception') {
     $endpoint = if ($Operation -eq 'observe') { 'observation' } else { 'perception' }
     Invoke-RestMethod ("http://127.0.0.1:8000/v1/" + $endpoint) -Headers $headers |
         ConvertTo-Json -Depth 20
@@ -31,7 +69,8 @@ if ($Operation -eq 'observe' -or $Operation -eq 'perception') {
             id=$record.id; result=$record.result; inventoryDelta=$record.inventoryDelta
             initialLogCount=$record.initialLogCount; model_called=$record.model_called
             steps=@($record.steps | ForEach-Object { [ordered]@{action=$_.action;result=$_.result} })
-            stopRequest=$record.stopRequest
+            executionId=$record.executionId; cancellation=$record.cancellation
+            skill=$record.skill; observationSchemaVersion=$record.observationSchemaVersion
         } | ConvertTo-Json -Depth 20
     }
 } elseif ($Operation -in @('mine','approach','collect')) {

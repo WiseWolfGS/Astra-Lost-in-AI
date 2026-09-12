@@ -161,12 +161,13 @@ def test_canopy_above_navigation_height_is_not_selected():
         choose(snapshot["observation"])
 
 
-def test_uncertain_action_requests_stop(runtime, monkeypatch):
+def test_unknown_action_does_not_send_ineffective_stop(runtime, monkeypatch):
     install(monkeypatch, [state()], {1: {"status": "running"}})
     mock = AsyncMock(return_value={"status": "queued"})
     monkeypatch.setattr(module, "bridge", mock)
     result = run()
-    mock.assert_awaited_once_with("POST", "/v1/actions", {"type": "stop"})
+    mock.assert_not_awaited()
+    assert result["cancellation"]["cancelConfirmed"] is False
     assert result["result"]["status"] == "stopped"
 
 
@@ -201,15 +202,16 @@ def test_missing_drop_does_not_start_second_mine(runtime, monkeypatch):
 @pytest.mark.parametrize("failure,reason", [
     (TimeoutError(), "goal_timeout"),
     (module.HTTPException(503, "offline"), "bridge_or_state_error")])
-def test_interrupted_dispatch_is_recorded_and_stop_requested(runtime, monkeypatch, failure, reason):
+def test_interrupted_unknown_dispatch_is_recorded_without_fake_confirmation(runtime, monkeypatch, failure, reason):
     install(monkeypatch, [state()])
     monkeypatch.setattr(module, "execute_action", AsyncMock(side_effect=failure))
     mock = AsyncMock(return_value={"status": "queued"})
     monkeypatch.setattr(module, "bridge", mock)
     result = run()
     assert result["result"]["reason"] == reason
-    assert result["stopRequest"]["status"] == "queued"
-    mock.assert_awaited_once()
+    assert result["cancellation"]["reason"] == "action_id_unavailable"
+    assert result["cancellation"]["cancelConfirmed"] is False
+    mock.assert_not_awaited()
     assert not module.step_lock.locked()
 
 

@@ -96,15 +96,20 @@ cd C:\Projects\AstraLostInAI\docker
 wood 성공은 result.reason=log_inventory_increased와 inventoryDelta>=1로 확인한다.
 개별 행동 completed나 HTTP 200만으로 목표 달성을 판정하지 않는다.
 실패 원인은 result.actionReason과 safetyFailure에서 확인한다. 원본 출력은 -FullRecord로 요청한다.
-긴급 수동 중단은 게임 메뉴를 연다. 현재 stop API는 실행 중 작업을 선점하는 비상정지 API가 아니다.
+실행 중 원격 취소는 다른 PowerShell에서 `./invoke-agent.ps1 -Operation cancel`로 요청한다.
+입력 해제 확인과 사용법은 [취소 프로토콜과 테스트](docs/CANCELLATION.md)를 따른다.
+긴급 수동 중단은 게임 메뉴를 연다. 기존 stop 행동은 실행 큐를 선점하지 않는다.
 
 서비스는 호스트 loopback 포트 8000/8765를 사용한다. health 이외 API는 bearer 인증이 필요하다.
 관측은 9×6×9 로컬 블록 격자·엔티티·조준 대상·인벤토리를 포함하며 이미지 인식 기반은 아니다.
 
 ## 검증과 문서
 
-Fabric 빌드와 Java 20개 테스트는 직전 모드 변경 시 통과했다.
-소스 통합 후 Docker 이미지 빌드, Python 56개·Node 10개 테스트 및 격리된 합성 연결 시험을 통과했다.
+[문서 안내](docs/README.md)에서 사용법·진행 상태·오류 보고서를 찾을 수 있다.
+
+Fabric 빌드와 Java 27개, Python 88개·Node 18개 테스트 및 합성 취소 연결 시험을 통과했다.
+이전 커밋의 GitHub CI 두 작업과 보고서는 사용자가 성공을 확인했다. 이번 취소 변경의 원격 CI는 Push 후 확인한다.
+사용자가 취소 명령의 실제 월드 테스트 성공을 확인했다.
 실제 월드에서 동일 실패 위치의 드롭 수집과 approach→mine→collect 전체 목표 성공을 확인했다.
 이는 모든 지형·서버 환경을 검증했다는 뜻은 아니다.
 
@@ -114,6 +119,7 @@ Fabric 빌드와 Java 20개 테스트는 직전 모드 변경 시 통과했다.
 - [채굴 규약](docs/MINING.md)
 - [평지 접근·수집](docs/NAVIGATION.md)
 - [원목 목표와 사용자 테스트](docs/WOOD_GOAL.md)
+- [버전별 스킬 조회·실행](docs/SKILLS.md)
 - [이동 오류 수정 보고서](docs/NAVIGATION_FIX.md)
 - [공개 저장소 포함·제외 기준](docs/PUBLISHING.md)
 - [Docker 설치·이관·격리 테스트](docker/README.md)

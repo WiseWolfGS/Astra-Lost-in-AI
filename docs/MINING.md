@@ -106,7 +106,8 @@ docker compose exec -T agent tail -n 1 /data/episodes.jsonl
 
 ## 검증 상태
 
-2026-09-12: Fabric 빌드와 Java 6개/Python 23개/Node 8개, 총 37개 자동 테스트 통과.
+초기 채굴 구현 당시: Fabric 빌드와 Java 6개/Python 23개/Node 8개, 총 37개 자동 테스트 통과.
+후속 기능을 포함한 최신 기준선은 [진행 상태](PROGRESS.md)를 따른다.
 실제 클라이언트 기동과 mine capability 전송을 확인한 뒤 사용자가 채굴 실행 성공을 보고했다.
 에피소드에서도 direct mine의 원목→공기와 completed를 확인했다. 해당 에피소드의 inventoryDelta는 빈 맵이었다.
 유료 mine 호출의 별도 에피소드는 이번 확인 자료에 없으므로 direct 채굴 증거와 구분한다.

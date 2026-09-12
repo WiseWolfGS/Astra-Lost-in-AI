@@ -30,7 +30,8 @@ export function createBridge(token, now = Date.now) {
   }
   function expire() {
     if (pending && (now() > pending.expiresAt || (pending.delivered && now()-seenAt > 5000))) {
-      remember(pending.id, 'expired'); pending = null;
+      remember(pending.id, 'expired', pending.cancelRequested ?
+        {reason:'cancel_ack_timeout', cancelRequested:true, cancelConfirmed:false} : {}); pending = null;
     }
   }
   return http.createServer(async (req, res) => {
@@ -60,7 +61,7 @@ export function createBridge(token, now = Date.now) {
         if (session && session !== body.session && now()-seenAt < 5000)
           return send(409,{error:'another client is connected'});
         if (session !== body.session && pending) {
-          remember(pending.id,'cancelled'); pending = null;
+          remember(pending.id,'cancelled',{reason:'session_changed',cancelConfirmed:false}); pending = null;
         }
         session = body.session; observation = body; seenAt = now();
         if (pending && body.result?.id === pending.id &&
@@ -70,12 +71,23 @@ export function createBridge(token, now = Date.now) {
           if (body.result.details && typeof body.result.details === 'object' &&
               !Array.isArray(body.result.details) && Buffer.byteLength(JSON.stringify(body.result.details)) <= 8192)
             feedback.details = body.result.details;
+          if (pending.cancelRequested) {
+            feedback.cancelRequested = true;
+            feedback.cancelConfirmed = body.result.status === 'cancelled' &&
+              body.result.details?.inputsReleased === true;
+          }
           remember(pending.id, body.result.status, feedback); pending = null;
         }
-        if (!body.ready && pending) { remember(pending.id,'cancelled'); pending = null; }
+        // A not-ready observation is not proof that a delivered action released
+        // its inputs. Wait for that action's terminal feedback or expiry.
+        if (!body.ready && pending && !pending.delivered) {
+          remember(pending.id,'cancelled',{reason:'not_ready_before_dispatch'}); pending = null;
+        }
         if (pending?.delivered && body.activeAction?.id === pending.id &&
             Buffer.byteLength(JSON.stringify(body.activeAction)) <= 2048)
-          remember(pending.id,'running',{progress:body.activeAction});
+          remember(pending.id,pending.cancelRequested ? 'cancelling' : 'running',
+            {progress:body.activeAction,...(pending.cancelRequested ? {cancelRequested:true,cancelConfirmed:false} : {})});
+        if (pending?.cancelRequested) return send(200,{cancel:{id:pending.id,session}});
         let command = undefined;
         if (pending && !pending.delivered && body.ready && !body.busy) {
           pending.delivered = true;
@@ -98,6 +110,27 @@ export function createBridge(token, now = Date.now) {
         pending = {id, action:body, expiresAt:now()+5000, delivered:false};
         remember(id,'queued');
         return send(202,{id,status:'queued'});
+      }
+      const cancelMatch = /^\/v1\/actions\/([a-f0-9-]{36})\/cancel$/.exec(req.url);
+      if (req.method === 'POST' && cancelMatch) {
+        if (!body || Array.isArray(body) || typeof body !== 'object' || Object.keys(body).length)
+          return send(400,{error:'cancel body must be empty'});
+        const id = cancelMatch[1], existing = results.get(id);
+        if (!existing) return send(404,{error:'unknown action'});
+        if (pending?.id !== id) return send(200,existing); // Terminal, idempotent; never touch another action.
+        if (!pending.delivered) {
+          remember(id,'cancelled',{reason:'cancelled_before_dispatch',cancelRequested:true,
+            cancelConfirmed:true,confirmation:'never_dispatched'});
+          pending = null;
+          return send(200,results.get(id));
+        }
+        if (!observation.capabilities?.includes('cancel')) return send(409,{error:'Minecraft client upgrade required for cancel'});
+        if (!pending.cancelRequested) {
+          pending.cancelRequested = true;
+          pending.expiresAt = Math.min(pending.expiresAt,now()+5000);
+          remember(id,'cancelling',{cancelRequested:true,cancelConfirmed:false});
+        }
+        return send(202,results.get(id));
       }
       if (req.method === 'GET' && req.url.startsWith('/v1/actions/')) {
         const result = results.get(req.url.slice('/v1/actions/'.length));

@@ -11,6 +11,7 @@ import net.minecraft.util.math.Direction
 import net.minecraft.util.math.Vec3d
 import net.minecraft.world.RaycastContext
 import org.wwgs.astralostinai.FlatPathfinder
+import org.wwgs.astralostinai.CollectionGoal
 import org.wwgs.astralostinai.PickupEvidence
 import org.wwgs.astralostinai.WalkingControl
 import kotlin.math.*
@@ -48,6 +49,17 @@ class NavigationController(
     private var lastProgress = start
     private var walkingTicks = 0
     private var safetyFailure: Map<String, Any> = emptyMap()
+    private var searchPasses = 0
+    private var nearCandidates = 0
+    private var blockedEdges = 0
+    private var blockedGoals = 0
+    private var hiddenGoals = 0
+    private var lastSearchFailure: Map<String, Any> = emptyMap()
+
+    private fun searchDetails(): Map<String, Any> = mapOf("passes" to searchPasses,
+        "nearCandidates" to nearCandidates, "blockedEdges" to blockedEdges,
+        "blockedGoals" to blockedGoals, "hiddenGoals" to hiddenGoals,
+        "lastBlocked" to lastSearchFailure)
 
     private fun point(cell: FlatPathfinder.Cell) = Vec3d(cell.x()+0.5, feetY.toDouble(), cell.z()+0.5)
     private fun horizontalDistance(a: Vec3d, b: Vec3d) = hypot(a.x-b.x, a.z-b.z)
@@ -113,7 +125,8 @@ class NavigationController(
 
     fun begin(): Map<String, Any>? {
         fun reject(reason:String)=mapOf("id" to id,"status" to "rejected","reason" to reason,
-            "details" to mapOf("safetyFailure" to safetyFailure,"position" to listOf(player.x,player.y,player.z)))
+            "details" to mapOf("safetyFailure" to safetyFailure,"position" to listOf(player.x,player.y,player.z),
+                "search" to searchDetails()))
         if (timeoutTicks !in 20..200) return reject("invalid_timeout")
         if (!player.isOnGround || abs(player.y-feetY)>0.05 || player.hasVehicle() || player.isUsingItem)
             return reject("requires_flat_ground")
@@ -137,11 +150,28 @@ class NavigationController(
         if (!traversable(start,start)) return reject("unsafe_start")
         val root=FlatPathfinder.Cell(player.blockX,player.blockZ)
         if (!traversable(start,point(root))) return reject("unsafe_start")
-        path=FlatPathfinder.find(root,{ cell ->
-            val candidate=point(cell)
-            val near=horizontalDistance(candidate,targetPoint) <= if (blockTarget!=null) 2.0 else 0.72
-            near && traversable(candidate,candidate) && visibleFrom(candidate)
-        },{ a,b -> traversable(point(a),point(b)) })
+        fun search(fallback: Boolean): List<FlatPathfinder.Cell> {
+            searchPasses++
+            return FlatPathfinder.find(root,{ cell ->
+                val candidate=point(cell)
+                val near=if (blockTarget!=null) horizontalDistance(candidate,targetPoint)<=2.0
+                    else CollectionGoal.near(candidate.x-targetPoint.x,candidate.z-targetPoint.z,fallback)
+                if (!near) false else {
+                    nearCandidates++
+                    if (!traversable(candidate,candidate)) {
+                        blockedGoals++; lastSearchFailure=safetyFailure; false
+                    } else if (!visibleFrom(candidate)) { hiddenGoals++; false } else true
+                }
+            },{ a,b ->
+                val safe=traversable(point(a),point(b))
+                if (!safe) { blockedEdges++; lastSearchFailure=safetyFailure }
+                safe
+            })
+        }
+        path=search(false)
+        // A drop beneath an overhead block may have no safe cell centre within
+        // .72. Try nearby stand positions once; never relax body/support checks.
+        if (path.isEmpty() && entityId!=null) path=search(true)
         if (path.isEmpty()) return reject("no_flat_path")
         clearKeys()
         if (entityId!=null) collector=this
@@ -223,7 +253,7 @@ class NavigationController(
             "inventoryDelta" to if(available) (evidence?.delta(after) ?: 0) else 0,
             "verifiedCollectedCount" to if(available) (evidence?.verifiedCount(after) ?: 0) else 0,
             "inventoryObserved" to available
-            ,"safetyFailure" to safetyFailure
+            ,"safetyFailure" to safetyFailure,"search" to searchDetails()
         ))
     }
 }
