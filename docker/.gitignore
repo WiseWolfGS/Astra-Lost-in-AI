@@ -1,0 +1,13 @@
+.env
+__pycache__/
+.pytest_cache/
+.env.*
+!.env.example
+*.log
+episodes*.jsonl
+promptlog*.txt
+astralostinai-bridge.json
+*.pem
+*.key
+local/
+/call1.ps1

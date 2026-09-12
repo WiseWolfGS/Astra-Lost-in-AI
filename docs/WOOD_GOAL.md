@@ -60,7 +60,7 @@ DRY_RUN과 무관하게 실제 월드를 조작한다. 기존 유료 단일 행�
 별도 PowerShell:
 
 ```powershell
-cd C:\Docker\astralostinai
+cd C:\Projects\AstraLostInAI\docker
 .\invoke-agent.ps1 -Operation observe
 .\invoke-agent.ps1 -Operation wood
 ```

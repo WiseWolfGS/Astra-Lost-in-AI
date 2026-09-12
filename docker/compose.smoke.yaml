@@ -1,0 +1,37 @@
+# Isolated, model-free transport test. No host ports, production secrets or volumes.
+name: astralostinai-smoke
+services:
+  bridge:
+    build: ./bridge
+    environment:
+      BRIDGE_TOKEN: synthetic-smoke-token-not-a-secret-00000000
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8765/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+  agent:
+    build: ./agent
+    environment:
+      BRIDGE_URL: http://bridge:8765
+      BRIDGE_TOKEN: synthetic-smoke-token-not-a-secret-00000000
+      OPENAI_API_KEY: ""
+      DRY_RUN: "true"
+      DATA_DIR: /data
+    tmpfs:
+      - /data:mode=1777
+    depends_on:
+      bridge:
+        condition: service_healthy
+    init: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

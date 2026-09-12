@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fabric:
+    name: Fabric build and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build and test with the checked-in wrapper
+        run: bash ./gradlew --no-daemon --console=plain build
+      - name: Preserve test reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fabric-test-reports
+          path: |
+            build/reports/tests/test/
+            build/test-results/test/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  docker:
+    name: Agent, bridge and isolated transport
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run the same isolated suite as local development
+        shell: pwsh
+        run: ./scripts/test-docker.ps1
+      - name: Preserve isolated test reports and logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docker-test-reports
+          path: local/ci-results/docker/
+          if-no-files-found: ignore
+          retention-days: 7

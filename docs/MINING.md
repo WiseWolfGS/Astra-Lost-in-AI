@@ -69,7 +69,7 @@ F3+P로 포커스 상실 시 일시정지를 해제하고 메뉴를 닫는다.
 접근 가능한 흙이나 원목 하나를 바라보고 PowerShell에서:
 
 ```powershell
-cd C:\Docker\astralostinai
+cd C:\Projects\AstraLostInAI\docker
 .\invoke-agent.ps1 -Operation perception
 .\invoke-agent.ps1 -Operation mine
 ```

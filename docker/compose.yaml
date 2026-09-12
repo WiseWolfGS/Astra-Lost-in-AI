@@ -1,0 +1,44 @@
+name: astralostinai
+services:
+  bridge:
+    build: ./bridge
+    environment:
+      BRIDGE_TOKEN: ${BRIDGE_TOKEN:?Run setup.ps1 first}
+    ports:
+      - "127.0.0.1:8765:8765"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8765/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+  agent:
+    build: ./agent
+    environment:
+      BRIDGE_URL: http://bridge:8765
+      BRIDGE_TOKEN: ${BRIDGE_TOKEN:?Run setup.ps1 first}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-astra}
+      DRY_RUN: ${DRY_RUN:-true}
+      DATA_DIR: /data
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - agent-data:/data
+    depends_on:
+      bridge:
+        condition: service_healthy
+    init: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+volumes:
+  agent-data:
+

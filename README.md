@@ -11,10 +11,11 @@ Mineflayer 대신 실제 Fabric 클라이언트를 사용한다.
 
 ## 저장소 범위
 
-**이 Git 저장소에는 Fabric 모드와 문서가 들어 있다.** Python/Node/Docker 소스는 별도 작업 폴더에
-있으며 현재 이 저장소의 Commit/Push에 포함되지 않는다. clone만으로 전체 시스템을 실행할 수는 없다.
-Docker 소스의 배포·버전 관리 구조 확정은 [개발 계획](docs/ROADMAP.md)의 첫 작업이다.
-문서의 `C:\Projects\AstraLostInAI`와 `C:\Docker\astralostinai`는 **예시 경로**이며 실제 위치로 바꿔 사용한다.
+**Fabric 모드와 Python/Node/Docker 소스를 하나의 저장소에서 관리한다.** Docker 소스는 `docker/`에 있다.
+실제 `.env`, 게임 설정, 로그·월드·에피소드 볼륨은 소스에 포함하지 않는다.
+운영 설정 파일은 Git에서 제외되는 `docker/.env`를 기본으로 사용한다.
+기존 외부 실행 폴더에서 이전하는 방법은 [Docker 실행 문서](docker/README.md#기존-환경-이관)를 따른다.
+문서의 `C:\Projects\AstraLostInAI`와 `C:\Projects\AstraLostInAI\docker`는 **예시 경로**이며 실제 위치로 바꿔 사용한다.
 
 ## 구성
 
@@ -35,9 +36,9 @@ flowchart LR
 | Fabric Loader / API | 0.19.5 / 0.116.17+1.21.1 |
 | Kotlin / Fabric Language Kotlin | 2.4.20 / 1.14.1+kotlin.2.4.20 |
 | Loom / Gradle | 1.17.20 / 9.6.1 |
-| 별도 Docker Python / Node | 3.12 / 24 |
+| Docker Python / Node | 3.12 / 24 |
 
-Fabric 의존성은 Gradle 설정, 별도 Docker 의존성은 requirements.lock 및 package-lock.json이 기준이다.
+Fabric 의존성은 Gradle 설정, Docker 의존성은 docker/agent/requirements.lock 및 docker/bridge/package-lock.json이 기준이다.
 모델은 OPENAI_MODEL로 설정하며 현재 템플릿은 gpt-6-astra를 사용한다. API 계정의 모델 접근 권한이 필요하다.
 
 ## 실행
@@ -49,11 +50,11 @@ cd C:\Projects\AstraLostInAI
 .\scripts\dev.ps1 -Task build
 ```
 
-별도 Docker 소스를 확보한 경우 PowerShell 7에서:
+새 환경은 PowerShell 7에서 아래를 실행한다. 기존 환경은 새 토큰을 만들기 전에 위 이관 문서를 확인한다.
 
 ```powershell
-cd C:\Docker\astralostinai
-.\setup.ps1 -MinecraftConfigDirectory 'C:\Projects\AstraLostInAI\run\config'
+cd C:\Projects\AstraLostInAI\docker
+.\setup.ps1
 docker compose up -d --build
 .\invoke-agent.ps1 -Operation health
 ```
@@ -87,7 +88,7 @@ step은 기본 DRY_RUN=true에서 관측·기록만 수행한다. 유료 실행�
 DRY_RUN 설정을 바꾸고 컨테이너에 반영한 뒤 명시적으로 요청한다. 자동 유료 반복 호출은 없다.
 
 ```powershell
-cd C:\Docker\astralostinai
+cd C:\Projects\AstraLostInAI\docker
 .\invoke-agent.ps1 -Operation perception
 .\invoke-agent.ps1 -Operation wood
 ```
@@ -102,8 +103,8 @@ wood 성공은 result.reason=log_inventory_increased와 inventoryDelta>=1로 확
 
 ## 검증과 문서
 
-현재 기준 Fabric 빌드와 Java 20개, 별도 agent Python 56개 테스트가 통과했다.
-Node 10개 테스트는 직전 변경 시 통과했으며 이후 Node 코드는 변경하지 않았다.
+Fabric 빌드와 Java 20개 테스트는 직전 모드 변경 시 통과했다.
+소스 통합 후 Docker 이미지 빌드, Python 56개·Node 10개 테스트 및 격리된 합성 연결 시험을 통과했다.
 실제 월드에서 동일 실패 위치의 드롭 수집과 approach→mine→collect 전체 목표 성공을 확인했다.
 이는 모든 지형·서버 환경을 검증했다는 뜻은 아니다.
 
@@ -115,5 +116,7 @@ Node 10개 테스트는 직전 변경 시 통과했으며 이후 Node 코드는 
 - [원목 목표와 사용자 테스트](docs/WOOD_GOAL.md)
 - [이동 오류 수정 보고서](docs/NAVIGATION_FIX.md)
 - [공개 저장소 포함·제외 기준](docs/PUBLISHING.md)
+- [Docker 설치·이관·격리 테스트](docker/README.md)
+- [CI 실행 조건·로컬 재현·보고서](docs/CI.md)
 
 원본 에피소드, 월드 세이브, 개인 실행 명령 기록과 인증 정보는 공개 문서에 포함하지 않는다.

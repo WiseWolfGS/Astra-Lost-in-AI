@@ -5,7 +5,8 @@
 - Fabric 소스·테스트·Gradle 설정·wrapper 스크립트 및 wrapper JAR.
 - 공개용 README, API/동작 규약, 일반화한 오류 보고서, 개발 계획.
 - 비밀값이 없는 설정 템플릿. 환경변수 이름·loopback 포트·예시 좌표는 비밀값이 아니다.
-- Docker 소스는 버전 관리 구조를 확정한 뒤 별도로 포함한다. 현재 Fabric Git 범위 밖에 있다.
+- docker/의 Python/Node 소스·테스트·Dockerfile·Compose 파일·lockfile·실행 도구 및 .env.example.
+- compose.smoke.yaml의 토큰은 외부에 포트를 공개하지 않는 합성 시험용 공개 상수이며 운영 인증 정보가 아니다.
 
 ## 로컬에만 둘 파일
 

@@ -75,7 +75,7 @@ cd C:\Projects\AstraLostInAI
 별도 PowerShell에서:
 
 ```powershell
-cd C:\Docker\astralostinai
+cd C:\Projects\AstraLostInAI\docker
 .\invoke-agent.ps1 -Operation observe
 .\invoke-agent.ps1 -Operation perception
 ```
