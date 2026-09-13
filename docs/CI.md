@@ -50,10 +50,10 @@ Python 보고서는 Docker cp로 회수할 수 있도록 /tmp에 기록한다. �
 
 ## 검증 상태
 
-로컬 Fabric build 성공(Java 37개), Python 129개·Node 26개 및 합성 연결·취소 확인 시험 통과.
+로컬 Fabric build 성공(Java 39개), Python 135개·Node 26개 및 합성 연결·취소 확인 시험 통과.
 보고서 생성·회수와 테스트 환경 정리까지 검증했으며 actionlint로 워크플로 구문을 확인했다.
 Linux용 wrapper 줄바꿈은 .gitattributes에서 LF로 고정하고 bash로 실행한다.
 
 2026-09-12 사용자가 이전 커밋의 GitHub 호스팅 CI 두 작업과 보고서의 성공을 확인했다.
-이번 작업대 설치 변경의 원격 결과는 다음 Commit/Push 후 별도로 확인한다.
+이번 돌 도구 제작 변경의 원격 결과는 다음 Commit/Push 후 별도로 확인한다.
 새 컴퓨터에서의 실제 게임 설치·실게임 행동 검증 역시 이 자동 테스트에 포함되지 않는다.

@@ -112,7 +112,8 @@ wood 성공은 result.reason=log_inventory_increased와 inventoryDelta>=1로 확
 
 [문서 안내](docs/README.md)에서 사용법·진행 상태·오류 보고서를 찾을 수 있다.
 
-Fabric 빌드와 Java 37개, Python 129개·Node 26개 테스트 및 합성 취소 연결 시험을 통과했다.
+Fabric 빌드와 Java 39개, Python 135개·Node 26개 테스트 및 합성 취소 연결 시험을 통과했다.
+돌 도구 5종 제작을 추가했다. 재료 준비와 실게임 확인은 [돌 도구 테스트](docs/STONE_TOOLS.md)를 따른다.
 이전 커밋의 GitHub CI 두 작업과 보고서는 사용자가 성공을 확인했다. 이번 취소 변경의 원격 CI는 Push 후 확인한다.
 사용자가 취소 명령 및 핫바 선택, 2×2 제작의 실제 월드 테스트 성공을 확인했다.
 실제 월드에서 동일 실패 위치의 드롭 수집과 approach→mine→collect 전체 목표 성공을 확인했다.

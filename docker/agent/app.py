@@ -124,7 +124,8 @@ class CraftWorkbench(StrictModel):
     x: int = Field(ge=-29999999, le=29999999, strict=True)
     y: int = Field(ge=-64, le=319, strict=True)
     z: int = Field(ge=-29999999, le=29999999, strict=True)
-    recipe: Literal["wooden_pickaxe", "wooden_axe", "wooden_sword", "wooden_shovel", "wooden_hoe"]
+    recipe: Literal["wooden_pickaxe", "wooden_axe", "wooden_sword", "wooden_shovel", "wooden_hoe",
+                    "stone_pickaxe", "stone_axe", "stone_sword", "stone_shovel", "stone_hoe"]
 
 class Collect(StrictModel):
     type: Literal["collect"]
@@ -255,6 +256,8 @@ async def execute_action(action, before):
             before["observation"].get("player", {}).get("dimension")):
         raise HTTPException(409, "Minecraft state changed during planning")
     timed = action.type in ("mine", "approach", "collect")
+    if action.type == "craft_workbench" and action.recipe.startswith("stone_") and "stone_tools" not in current["observation"].get("capabilities", []):
+        raise HTTPException(409, "Restart Minecraft with support for stone_tools")
     if (timed or action.type in ("select_hotbar", "craft", "place_workbench", "craft_workbench", "move_hotbar")) and action.type not in current["observation"].get("capabilities", []):
         raise HTTPException(409, "Restart Minecraft with support for " + action.type)
     if control and control.cancel_requested:

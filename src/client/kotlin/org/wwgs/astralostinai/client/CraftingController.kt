@@ -35,11 +35,13 @@ class CraftingController(private val client: MinecraftClient, private val id: St
     private val startNanos = System.nanoTime()
     private val output = "minecraft:$recipe"
     private val input = if (recipe.endsWith("_planks")) "minecraft:" + recipe.removeSuffix("_planks") + "_log" else "#planks"
-    private val tool = org.wwgs.astralostinai.WoodenToolRecipe.find(recipe)
-    private val consumed = tool?.planks() ?: if (recipe == "crafting_table") 4 else if (recipe == "stick") 2 else 1
+    private val tool = org.wwgs.astralostinai.ToolRecipe.find(recipe)
+    private val consumed = tool?.materialCount() ?: if (recipe == "crafting_table") 4 else if (recipe == "stick") 2 else 1
     private val produced = if (tool != null || recipe == "crafting_table") 1 else 4
     private fun item(stack: ItemStack) = Registries.ITEM.getId(stack.item).toString()
-    private fun matches(stack: ItemStack) = if (input == "#planks") item(stack) in WOODS.map { "minecraft:${it}_planks" } else item(stack) == input
+    private fun matches(stack: ItemStack) = if (tool?.material() == "stone_tool_materials")
+        stack.isIn(net.minecraft.registry.tag.ItemTags.STONE_TOOL_MATERIALS)
+        else if (input == "#planks") item(stack) in WOODS.map { "minecraft:${it}_planks" } else item(stack) == input
     private fun countInput() = server.filterKeys { it in grid || it in inventorySlots }.values.sumOf { if (matches(it)) it.count else 0 }
     private fun countSticks() = server.filterKeys { it in grid || it in inventorySlots }.values.sumOf { if (item(it) == "minecraft:stick") it.count else 0 }
     private fun countOutput() = server.filterKeys { it in inventorySlots }.values.sumOf { if (item(it) == output) it.count else 0 }
@@ -86,6 +88,7 @@ class CraftingController(private val client: MinecraftClient, private val id: St
         if (active === this) active = null
         return mapOf("id" to id, "status" to status, "reason" to reason, "details" to mapOf(
             "recipe" to output, "inputConsumed" to (beforeInput-countInput()), "outputGained" to (countOutput()-beforeOutput),
+            "inputMaterial" to (tool?.material() ?: input),
             "sticksConsumed" to (beforeSticks-countSticks()), "syncId" to handler.syncId,
             "verification" to "server_slot_packets", "outputTransferSent" to taken,
             "recipeRequestSent" to requested, "pendingChangesPossible" to (requested && status != "completed"),

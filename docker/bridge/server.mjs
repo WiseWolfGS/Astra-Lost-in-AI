@@ -14,7 +14,8 @@ export function validateAction(a) {
     [a.expectedSource,a.expectedTarget].every(v=>typeof v==='string' && v.length<=128 && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(v));
   if (a.type === 'craft_workbench') return keys === 'recipe,type,x,y,z' &&
     ['x','y','z'].every(k=>Number.isInteger(a[k])) && Math.abs(a.x)<=29999999 && Math.abs(a.z)<=29999999 &&
-    a.y>=-64 && a.y<=319 && ['wooden_pickaxe','wooden_axe','wooden_sword','wooden_shovel','wooden_hoe'].includes(a.recipe);
+    a.y>=-64 && a.y<=319 && ['wooden_pickaxe','wooden_axe','wooden_sword','wooden_shovel','wooden_hoe',
+      'stone_pickaxe','stone_axe','stone_sword','stone_shovel','stone_hoe'].includes(a.recipe);
   if (a.type === 'place_workbench') return keys === 'expectedSupport,type,x,y,z' &&
     ['x','y','z'].every(k=>Number.isInteger(a[k])) && Math.abs(a.x)<=29999999 && Math.abs(a.z)<=29999999 &&
     a.y>=-64 && a.y<=318 && ['minecraft:dirt','minecraft:grass_block','minecraft:stone','minecraft:cobblestone'].includes(a.expectedSupport);
@@ -122,6 +123,8 @@ export function createBridge(token, now = Date.now) {
       if (req.method === 'POST' && req.url === '/v1/actions') {
         if (!validateAction(body)) return send(400,{error:'invalid action'});
         if (!observation?.ready || now()-seenAt > 5000) return send(409,{error:'Minecraft not ready'});
+        if (body.type === 'craft_workbench' && body.recipe.startsWith('stone_') && !observation.capabilities?.includes('stone_tools'))
+          return send(409,{error:'Minecraft client upgrade required for stone_tools'});
         if (['mine','approach','collect','select_hotbar','craft','place_workbench','craft_workbench','move_hotbar'].includes(body.type) && !observation.capabilities?.includes(body.type))
           return send(409,{error:'Minecraft client upgrade required for '+body.type});
         if (pending || observation.busy) return send(409,{error:'action already in progress'});

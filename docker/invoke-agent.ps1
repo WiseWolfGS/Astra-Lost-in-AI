@@ -13,7 +13,7 @@ param(
     [string]$SkillVersion = '1.1.0',
     [ValidateRange(0,8)][int]$Slot = 0,
     [ValidateRange(9,35)][int]$SourceSlot = 9,
-    [ValidateSet('oak_planks','spruce_planks','birch_planks','jungle_planks','acacia_planks','dark_oak_planks','mangrove_planks','cherry_planks','stick','crafting_table','wooden_pickaxe','wooden_axe','wooden_sword','wooden_shovel','wooden_hoe')][string]$Recipe = 'oak_planks'
+    [ValidateSet('oak_planks','spruce_planks','birch_planks','jungle_planks','acacia_planks','dark_oak_planks','mangrove_planks','cherry_planks','stick','crafting_table','wooden_pickaxe','wooden_axe','wooden_sword','wooden_shovel','wooden_hoe','stone_pickaxe','stone_axe','stone_sword','stone_shovel','stone_hoe')][string]$Recipe = 'oak_planks'
 )
 $ErrorActionPreference = 'Stop'
 if ($Operation -eq 'health') {
@@ -39,7 +39,7 @@ if ($Operation -eq 'move-hotbar') {
         expectedSource=$source.item;expectedTarget=$targetItem;sourceCount=[int]$source.count;targetCount=$targetCount}} | ConvertTo-Json -Depth 5
     Invoke-RestMethod 'http://127.0.0.1:8000/v1/act' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 35 | ConvertTo-Json -Depth 25
 } elseif ($Operation -eq 'craft-workbench') {
-    if ($Recipe -notlike 'wooden_*') { throw 'Choose a wooden tool recipe, for example -Recipe wooden_pickaxe.' }
+    if ($Recipe -notmatch '^(wooden|stone)_') { throw 'Choose a wooden or stone tool recipe, for example -Recipe stone_pickaxe.' }
     $snapshot = Invoke-RestMethod 'http://127.0.0.1:8000/v1/observation' -Headers $headers -TimeoutSec 10
     if (!$snapshot.connected -or !$snapshot.observation.ready) { throw 'Enter an unpaused survival world and close screens first.' }
     if ($snapshot.observation.capabilities -notcontains 'craft_workbench') { throw 'Restart Minecraft with support for craft_workbench.' }

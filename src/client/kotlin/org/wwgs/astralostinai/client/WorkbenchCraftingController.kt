@@ -23,7 +23,7 @@ class WorkbenchCraftingController(private val client: MinecraftClient, private v
     fun allowsScreen(): Boolean = opened && client.currentScreen is CraftingScreen &&
         player.currentScreenHandler is CraftingScreenHandler && (handler == null || player.currentScreenHandler === handler)
     fun begin(): Map<String, Any>? {
-        if (org.wwgs.astralostinai.WoodenToolRecipe.find(recipe) == null) return finish("rejected","unsupported_recipe")
+        if (org.wwgs.astralostinai.ToolRecipe.find(recipe) == null) return finish("rejected","unsupported_recipe")
         if (player.isSneaking || player.isUsingItem || player.currentScreenHandler !== player.playerScreenHandler ||
             !player.currentScreenHandler.cursorStack.isEmpty) return finish("rejected","inventory_busy")
         if (!world.getBlockState(target).isOf(Blocks.CRAFTING_TABLE)) return finish("rejected","workbench_missing")

@@ -152,7 +152,7 @@ class AstralostinaiClient : ClientModInitializer {
             "session" to session, "protocol" to 1, "ready" to ready,
             "busy" to (activeId != null), "result" to result
         )
-        state["capabilities"] = listOf("move", "look", "stop", "mine", "approach", "collect", "cancel", "select_hotbar", "craft", "place_workbench", "craft_workbench", "move_hotbar")
+        state["capabilities"] = listOf("move", "look", "stop", "mine", "approach", "collect", "cancel", "select_hotbar", "craft", "place_workbench", "craft_workbench", "move_hotbar", "stone_tools")
         state["activeAction"] = hotbarTransfer?.progress() ?: workbenchCrafting?.progress() ?: placement?.progress() ?: crafting?.progress() ?: mining?.progress() ?: navigation?.progress()
             ?: activeId?.let { mapOf("id" to it, "type" to "move", "remainingTicks" to remaining) }
         if (player != null && world != null) {

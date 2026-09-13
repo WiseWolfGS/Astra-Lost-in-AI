@@ -4,6 +4,19 @@ import pytest
 from pydantic import ValidationError
 import app as module
 BASE={'type':'craft_workbench','recipe':'wooden_pickaxe','x':0,'y':64,'z':0}
+@pytest.mark.parametrize('recipe', ['stone_pickaxe','stone_axe','stone_sword','stone_shovel','stone_hoe'])
+def test_stone_recipes_are_accepted(recipe):
+    assert module.DirectAction(action={**BASE,'recipe':recipe}).action.recipe == recipe
+
+def test_wood_only_client_rejects_stone_before_dispatch(monkeypatch):
+    state={'connected':True,'observation':{'ready':True,'session':'test','capabilities':['craft_workbench']}}
+    bridge=AsyncMock(return_value=state)
+    monkeypatch.setattr(module,'bridge',bridge)
+    with pytest.raises(module.HTTPException) as exc:
+        asyncio.run(module.execute_action(module.CraftWorkbench(**{**BASE,'recipe':'stone_pickaxe'}),state))
+    assert exc.value.status_code == 409
+    bridge.assert_awaited_once_with('GET','/v1/observation')
+
 @pytest.mark.parametrize('change',[{'recipe':'diamond_pickaxe'},{'y':320},{'x':True},{'repeat':2}])
 def test_invalid_workbench_requests(change):
     with pytest.raises(ValidationError): module.DirectAction(action={**BASE,**change})
