@@ -32,6 +32,9 @@ class AstralostinaiClient : ClientModInitializer {
     private var mining: MiningController? = null
     private var navigation: NavigationController? = null
     private var crafting: CraftingController? = null
+    private var placement: WorkbenchPlacementController? = null
+    private var workbenchCrafting: WorkbenchCraftingController? = null
+    private var hotbarTransfer: HotbarTransferController? = null
     private var lastError = 0L
     private lateinit var config: JsonObject
     override fun onInitializeClient() {
@@ -46,6 +49,27 @@ class AstralostinaiClient : ClientModInitializer {
         }
         require(config.get("token").asString.length >= 32) { "Bridge token must have at least 32 characters" }
         ClientTickEvents.START_CLIENT_TICK.register { client ->
+            if (hotbarTransfer != null) {
+                if (!isReady(client)) release(client, "cancelled")
+                else {
+                    val outcome = hotbarTransfer!!.tick()
+                    if (outcome != null) { result = outcome; hotbarTransfer = null; activeId = null }
+                }
+            }
+            if (workbenchCrafting != null) {
+                if (!isReady(client)) release(client, "cancelled")
+                else {
+                    val outcome = workbenchCrafting!!.tick()
+                    if (outcome != null) { result = outcome; workbenchCrafting = null; activeId = null }
+                }
+            }
+            if (placement != null) {
+                if (!isReady(client)) release(client, "cancelled")
+                else {
+                    val outcome = placement!!.tick()
+                    if (outcome != null) { result = outcome; placement = null; activeId = null }
+                }
+            }
             if (crafting != null) {
                 if (!isReady(client)) release(client, "cancelled")
                 else {
@@ -80,7 +104,7 @@ class AstralostinaiClient : ClientModInitializer {
     }
 
     private fun isReady(client: MinecraftClient) = client.player != null && client.world != null &&
-        client.currentScreen == null && !client.isPaused && client.player!!.isAlive &&
+        (client.currentScreen == null || workbenchCrafting?.allowsScreen() == true) && !client.isPaused && client.player!!.isAlive &&
         client.interactionManager?.currentGameMode?.name == "SURVIVAL"
 
     private fun release(client: MinecraftClient, status: String, reason: String = "control_interrupted") {
@@ -93,6 +117,9 @@ class AstralostinaiClient : ClientModInitializer {
         client.options.sprintKey.isPressed = false
         client.player?.isSprinting = false
         val outcome = mining?.finish(status, reason)
+            ?: hotbarTransfer?.finish(status, reason)
+            ?: workbenchCrafting?.finish(status, reason)
+            ?: placement?.finish(status, reason)
             ?: crafting?.finish(status, reason)
             ?: navigation?.finish(status, reason)
             ?: mapOf("id" to activeId!!, "status" to status, "reason" to reason)
@@ -101,6 +128,9 @@ class AstralostinaiClient : ClientModInitializer {
         result = outcome + ("details" to (details + ("inputsReleased" to true)))
         mining = null
         crafting = null
+        placement = null
+        workbenchCrafting = null
+        hotbarTransfer = null
         navigation = null
         activeId = null
         remaining = 0
@@ -122,8 +152,8 @@ class AstralostinaiClient : ClientModInitializer {
             "session" to session, "protocol" to 1, "ready" to ready,
             "busy" to (activeId != null), "result" to result
         )
-        state["capabilities"] = listOf("move", "look", "stop", "mine", "approach", "collect", "cancel", "select_hotbar", "craft")
-        state["activeAction"] = crafting?.progress() ?: mining?.progress() ?: navigation?.progress()
+        state["capabilities"] = listOf("move", "look", "stop", "mine", "approach", "collect", "cancel", "select_hotbar", "craft", "place_workbench", "craft_workbench", "move_hotbar")
+        state["activeAction"] = hotbarTransfer?.progress() ?: workbenchCrafting?.progress() ?: placement?.progress() ?: crafting?.progress() ?: mining?.progress() ?: navigation?.progress()
             ?: activeId?.let { mapOf("id" to it, "type" to "move", "remainingTicks" to remaining) }
         if (player != null && world != null) {
             state["player"] = mapOf(
@@ -200,6 +230,31 @@ class AstralostinaiClient : ClientModInitializer {
         val id = command.get("id").asString
         val action = command.getAsJsonObject("action")
         when (action.get("type").asString) {
+            "move_hotbar" -> {
+                require(activeId == null)
+                val controller = HotbarTransferController(client,id,action.get("sourceSlot").asInt,
+                    action.get("hotbarSlot").asInt,action.get("expectedSource").asString,
+                    action.get("expectedTarget").asString,action.get("sourceCount").asInt,action.get("targetCount").asInt)
+                val rejection = controller.begin()
+                if (rejection != null) result = rejection
+                else { hotbarTransfer = controller; activeId = id }
+            }
+            "craft_workbench" -> {
+                require(activeId == null)
+                val controller = WorkbenchCraftingController(client,id,BlockPos(action.get("x").asInt,
+                    action.get("y").asInt,action.get("z").asInt),action.get("recipe").asString)
+                val rejection = controller.begin()
+                if (rejection != null) result = rejection
+                else { workbenchCrafting = controller; activeId = id }
+            }
+            "place_workbench" -> {
+                require(activeId == null)
+                val controller = WorkbenchPlacementController(client, id, BlockPos(
+                    action.get("x").asInt, action.get("y").asInt, action.get("z").asInt), action.get("expectedSupport").asString)
+                val rejection = controller.begin()
+                if (rejection != null) result = rejection
+                else { placement = controller; activeId = id }
+            }
             "craft" -> {
                 require(activeId == null)
                 val controller = CraftingController(client, id, action.get("recipe").asString)

@@ -14,9 +14,11 @@ public class CraftingTrackingMixin {
     @Inject(method="onInventory", at=@At("TAIL"))
     private void astra$inventory(InventoryS2CPacket packet, CallbackInfo ci) {
         CraftingController.inventory(packet.getSyncId(), packet.getContents());
+        org.wwgs.astralostinai.client.HotbarTransferController.inventory(packet.getSyncId(), packet.getContents());
     }
     @Inject(method="onScreenHandlerSlotUpdate", at=@At("TAIL"))
     private void astra$slot(ScreenHandlerSlotUpdateS2CPacket packet, CallbackInfo ci) {
         CraftingController.slot(packet.getSyncId(), packet.getSlot(), packet.getStack());
+        org.wwgs.astralostinai.client.HotbarTransferController.slot(packet.getSyncId(), packet.getSlot(), packet.getStack());
     }
 }

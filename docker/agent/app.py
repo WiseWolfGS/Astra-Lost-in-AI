@@ -93,6 +93,15 @@ class Craft(StrictModel):
     recipe: Literal["oak_planks", "spruce_planks", "birch_planks", "jungle_planks",
                     "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "stick", "crafting_table"]
 
+class MoveHotbar(StrictModel):
+    type: Literal["move_hotbar"]
+    sourceSlot: int = Field(ge=9, le=35, strict=True)
+    hotbarSlot: int = Field(ge=0, le=8, strict=True)
+    expectedSource: str = Field(pattern=r"^[a-z0-9_.-]+:[a-z0-9_./-]+$", max_length=128)
+    expectedTarget: str = Field(pattern=r"^[a-z0-9_.-]+:[a-z0-9_./-]+$", max_length=128)
+    sourceCount: int = Field(ge=1, le=64, strict=True)
+    targetCount: int = Field(ge=0, le=64, strict=True)
+
 class Mine(StrictModel):
     type: Literal["mine"]
     x: int = Field(ge=-29999999, le=29999999, strict=True)
@@ -102,6 +111,20 @@ class Mine(StrictModel):
 
 class Approach(Mine):
     type: Literal["approach"]
+
+class PlaceWorkbench(StrictModel):
+    type: Literal["place_workbench"]
+    x: int = Field(ge=-29999999, le=29999999, strict=True)
+    y: int = Field(ge=-64, le=318, strict=True)
+    z: int = Field(ge=-29999999, le=29999999, strict=True)
+    expectedSupport: Literal["minecraft:dirt", "minecraft:grass_block", "minecraft:stone", "minecraft:cobblestone"]
+
+class CraftWorkbench(StrictModel):
+    type: Literal["craft_workbench"]
+    x: int = Field(ge=-29999999, le=29999999, strict=True)
+    y: int = Field(ge=-64, le=319, strict=True)
+    z: int = Field(ge=-29999999, le=29999999, strict=True)
+    recipe: Literal["wooden_pickaxe", "wooden_axe", "wooden_sword", "wooden_shovel", "wooden_hoe"]
 
 class Collect(StrictModel):
     type: Literal["collect"]
@@ -115,7 +138,7 @@ class Plan(StrictModel):
     action: Action
 
 class DirectAction(StrictModel):
-    action: Annotated[Action | SelectHotbar | Craft, Field(discriminator="type")]
+    action: Annotated[Action | SelectHotbar | Craft | PlaceWorkbench | CraftWorkbench | MoveHotbar, Field(discriminator="type")]
 
 class Step(StrictModel):
     goal: str = Field(default="주변을 관찰하고 안전한 다음 행동을 정한다.", max_length=2000)
@@ -232,7 +255,7 @@ async def execute_action(action, before):
             before["observation"].get("player", {}).get("dimension")):
         raise HTTPException(409, "Minecraft state changed during planning")
     timed = action.type in ("mine", "approach", "collect")
-    if (timed or action.type in ("select_hotbar", "craft")) and action.type not in current["observation"].get("capabilities", []):
+    if (timed or action.type in ("select_hotbar", "craft", "place_workbench", "craft_workbench", "move_hotbar")) and action.type not in current["observation"].get("capabilities", []):
         raise HTTPException(409, "Restart Minecraft with support for " + action.type)
     if control and control.cancel_requested:
         return cancelled_before_dispatch()
@@ -244,7 +267,7 @@ async def execute_action(action, before):
     if control:
         control.dispatch_pending = False
         control.action_id = queued["id"]
-    checks = 80 if action.type == "craft" else 4 * (action.timeoutTicks // 20 + 10) if timed else 32
+    checks = 96 if action.type == "craft_workbench" else 80 if action.type in ("craft", "place_workbench", "move_hotbar") else 4 * (action.timeoutTicks // 20 + 10) if timed else 32
     result = queued
     cancellation_attempted = False
     try:

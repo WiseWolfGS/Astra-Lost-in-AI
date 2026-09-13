@@ -6,6 +6,18 @@ export function validateAction(a) {
   if (!a || typeof a !== 'object' || Array.isArray(a)) return false;
   const keys = Object.keys(a).sort().join(',');
   if (a.type === 'stop') return keys === 'type';
+  if (a.type === 'move_hotbar') return keys === 'expectedSource,expectedTarget,hotbarSlot,sourceCount,sourceSlot,targetCount,type' &&
+    Number.isInteger(a.sourceSlot) && a.sourceSlot>=9 && a.sourceSlot<=35 &&
+    Number.isInteger(a.hotbarSlot) && a.hotbarSlot>=0 && a.hotbarSlot<=8 &&
+    Number.isInteger(a.sourceCount) && a.sourceCount>=1 && a.sourceCount<=64 &&
+    Number.isInteger(a.targetCount) && a.targetCount>=0 && a.targetCount<=64 &&
+    [a.expectedSource,a.expectedTarget].every(v=>typeof v==='string' && v.length<=128 && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(v));
+  if (a.type === 'craft_workbench') return keys === 'recipe,type,x,y,z' &&
+    ['x','y','z'].every(k=>Number.isInteger(a[k])) && Math.abs(a.x)<=29999999 && Math.abs(a.z)<=29999999 &&
+    a.y>=-64 && a.y<=319 && ['wooden_pickaxe','wooden_axe','wooden_sword','wooden_shovel','wooden_hoe'].includes(a.recipe);
+  if (a.type === 'place_workbench') return keys === 'expectedSupport,type,x,y,z' &&
+    ['x','y','z'].every(k=>Number.isInteger(a[k])) && Math.abs(a.x)<=29999999 && Math.abs(a.z)<=29999999 &&
+    a.y>=-64 && a.y<=318 && ['minecraft:dirt','minecraft:grass_block','minecraft:stone','minecraft:cobblestone'].includes(a.expectedSupport);
   if (a.type === 'craft') return keys === 'recipe,type' &&
     ['oak_planks','spruce_planks','birch_planks','jungle_planks','acacia_planks',
      'dark_oak_planks','mangrove_planks','cherry_planks','stick','crafting_table'].includes(a.recipe);
@@ -98,7 +110,7 @@ export function createBridge(token, now = Date.now) {
         let command = undefined;
         if (pending && !pending.delivered && body.ready && !body.busy) {
           pending.delivered = true;
-          pending.expiresAt = now() + (pending.action.type === 'craft' ? 14000 : ['mine','approach','collect'].includes(pending.action.type) ? pending.action.timeoutTicks*50+4000 : 5000);
+          pending.expiresAt = now() + (pending.action.type === 'craft_workbench' ? 18000 : ['craft','place_workbench','move_hotbar'].includes(pending.action.type) ? 14000 : ['mine','approach','collect'].includes(pending.action.type) ? pending.action.timeoutTicks*50+4000 : 5000);
           remember(pending.id,'running');
           command = {id:pending.id, action:pending.action};
         }
@@ -110,7 +122,7 @@ export function createBridge(token, now = Date.now) {
       if (req.method === 'POST' && req.url === '/v1/actions') {
         if (!validateAction(body)) return send(400,{error:'invalid action'});
         if (!observation?.ready || now()-seenAt > 5000) return send(409,{error:'Minecraft not ready'});
-        if (['mine','approach','collect','select_hotbar','craft'].includes(body.type) && !observation.capabilities?.includes(body.type))
+        if (['mine','approach','collect','select_hotbar','craft','place_workbench','craft_workbench','move_hotbar'].includes(body.type) && !observation.capabilities?.includes(body.type))
           return send(409,{error:'Minecraft client upgrade required for '+body.type});
         if (pending || observation.busy) return send(409,{error:'action already in progress'});
         const id = randomUUID();

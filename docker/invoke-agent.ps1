@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('observe', 'perception', 'mine', 'approach', 'collect', 'wood', 'step', 'health', 'execution', 'cancel', 'skills', 'skill-check', 'skill-run', 'select-hotbar', 'craft')][string]$Operation = 'observe',
+    [ValidateSet('observe', 'perception', 'mine', 'approach', 'collect', 'wood', 'step', 'health', 'execution', 'cancel', 'skills', 'skill-check', 'skill-run', 'select-hotbar', 'craft', 'place-workbench', 'craft-workbench', 'move-hotbar')][string]$Operation = 'observe',
     [string]$Goal = '주변을 관찰하고 안전한 다음 행동을 정한다.',
     [ValidateRange(20,200)][int]$TimeoutTicks = 200,
     [ValidateRange(-1,2147483647)][int]$EntityId = -1,
@@ -12,7 +12,8 @@ param(
     [ValidatePattern('^[a-z][a-z0-9_-]*$')][string]$SkillId = 'wood',
     [string]$SkillVersion = '1.1.0',
     [ValidateRange(0,8)][int]$Slot = 0,
-    [ValidateSet('oak_planks','spruce_planks','birch_planks','jungle_planks','acacia_planks','dark_oak_planks','mangrove_planks','cherry_planks','stick','crafting_table')][string]$Recipe = 'oak_planks'
+    [ValidateRange(9,35)][int]$SourceSlot = 9,
+    [ValidateSet('oak_planks','spruce_planks','birch_planks','jungle_planks','acacia_planks','dark_oak_planks','mangrove_planks','cherry_planks','stick','crafting_table','wooden_pickaxe','wooden_axe','wooden_sword','wooden_shovel','wooden_hoe')][string]$Recipe = 'oak_planks'
 )
 $ErrorActionPreference = 'Stop'
 if ($Operation -eq 'health') {
@@ -23,7 +24,41 @@ $tokenLine = Get-Content -LiteralPath $EnvFile |
     Where-Object { $_ -match '^BRIDGE_TOKEN=' } | Select-Object -First 1
 if (!$tokenLine) { throw 'Run setup.ps1 first' }
 $headers = @{Authorization = 'Bearer ' + $tokenLine.Substring('BRIDGE_TOKEN='.Length)}
-if ($Operation -eq 'craft') {
+if ($Operation -eq 'move-hotbar') {
+    $snapshot = Invoke-RestMethod 'http://127.0.0.1:8000/v1/observation' -Headers $headers -TimeoutSec 10
+    if (!$snapshot.connected -or !$snapshot.observation.ready) { throw 'Enter an unpaused survival world and close screens first.' }
+    if ($snapshot.observation.capabilities -notcontains 'move_hotbar') { throw 'Restart Minecraft with support for move_hotbar.' }
+    $stacks = @($snapshot.observation.player.inventory)
+    $sources = @($stacks | Where-Object { $_.slot -ge 9 -and $_.slot -le 35 -and $(if ($Item) { $_.item -eq $Item } else { $_.slot -eq $SourceSlot }) } | Sort-Object slot)
+    if (!$sources.Count) { throw 'No matching item in inventory slots 9 through 35. Check observe; the item may already be in the hotbar.' }
+    $source = $sources[0]
+    $targets = @($stacks | Where-Object slot -eq $Slot)
+    $targetItem = if ($targets.Count) { $targets[0].item } else { 'minecraft:air' }
+    $targetCount = if ($targets.Count) { [int]$targets[0].count } else { 0 }
+    $body = @{action=@{type='move_hotbar';sourceSlot=[int]$source.slot;hotbarSlot=$Slot;
+        expectedSource=$source.item;expectedTarget=$targetItem;sourceCount=[int]$source.count;targetCount=$targetCount}} | ConvertTo-Json -Depth 5
+    Invoke-RestMethod 'http://127.0.0.1:8000/v1/act' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 35 | ConvertTo-Json -Depth 25
+} elseif ($Operation -eq 'craft-workbench') {
+    if ($Recipe -notlike 'wooden_*') { throw 'Choose a wooden tool recipe, for example -Recipe wooden_pickaxe.' }
+    $snapshot = Invoke-RestMethod 'http://127.0.0.1:8000/v1/observation' -Headers $headers -TimeoutSec 10
+    if (!$snapshot.connected -or !$snapshot.observation.ready) { throw 'Enter an unpaused survival world and close screens first.' }
+    if ($snapshot.observation.capabilities -notcontains 'craft_workbench') { throw 'Restart Minecraft with support for craft_workbench.' }
+    $target = $snapshot.observation.environment.target
+    if ($target.type -ne 'block' -or $target.block.id -ne 'minecraft:crafting_table') { throw 'Aim at a nearby placed crafting table.' }
+    $body = @{action=@{type='craft_workbench';recipe=$Recipe;x=[int]$target.position[0];
+        y=[int]$target.position[1];z=[int]$target.position[2]}} | ConvertTo-Json -Depth 5
+    Invoke-RestMethod 'http://127.0.0.1:8000/v1/act' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 40 | ConvertTo-Json -Depth 25
+} elseif ($Operation -eq 'place-workbench') {
+    $snapshot = Invoke-RestMethod 'http://127.0.0.1:8000/v1/observation' -Headers $headers -TimeoutSec 10
+    if (!$snapshot.connected -or !$snapshot.observation.ready) { throw 'Enter an unpaused survival world first.' }
+    if ($snapshot.observation.capabilities -notcontains 'place_workbench') { throw 'Restart Minecraft with support for place_workbench.' }
+    $target = $snapshot.observation.environment.target
+    if ($target.type -ne 'block' -or $target.face -ne 'up') { throw 'Aim at the top face of nearby ground.' }
+    if ($snapshot.observation.player.mainHand.item -ne 'minecraft:crafting_table') { throw 'Select a hotbar slot holding a crafting table first.' }
+    $body = @{action=@{type='place_workbench';x=[int]$target.position[0];y=[int]$target.position[1];
+        z=[int]$target.position[2];expectedSupport=$target.block.id}} | ConvertTo-Json -Depth 5
+    Invoke-RestMethod 'http://127.0.0.1:8000/v1/act' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 35 | ConvertTo-Json -Depth 25
+} elseif ($Operation -eq 'craft') {
     $body = @{action=@{type='craft';recipe=$Recipe}} | ConvertTo-Json -Depth 5
     Invoke-RestMethod 'http://127.0.0.1:8000/v1/act' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 35 | ConvertTo-Json -Depth 25
 } elseif ($Operation -eq 'select-hotbar') {

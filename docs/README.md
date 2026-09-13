@@ -9,7 +9,10 @@
 | 최종 목표·단계별 완료 기준 | [MASTER PLAN](MASTER_PLAN.md) |
 | 관측 데이터 형식 | [관측 규약](OBSERVATION.md) |
 | 핫바 선택·인벤토리 제어 | [인벤토리 규약](INVENTORY.md) |
+| 제작 도구를 핫바로 옮기기 | [핫바 이동](HOTBAR_TRANSFER.md) |
 | 개인 제작 칸의 판자·막대·작업대 제작 | [2×2 제작](CRAFTING.md) |
+| 작업대 화면 열기·나무 도구 제작 | [3×3 제작](WORKBENCH_CRAFTING.md) |
+| 작업대 배치 및 상호작용 | [작업대 규약](WORKBENCH.md) |
 | 직접 채굴·이동·수집 | [채굴](MINING.md), [평지 접근·수집](NAVIGATION.md) |
 | 원목 목표·버전 지정 실행 | [wood 동작](WOOD_GOAL.md), [스킬 등록](SKILLS.md) |
 | 실행 상태 조회·취소 | [취소 규약](CANCELLATION.md) |
