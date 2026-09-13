@@ -1,11 +1,15 @@
 # 문서 안내
 
 현재 구현과 검증 결과는 [진행 상태](PROGRESS.md), 후속 작업은 [개발 계획](ROADMAP.md)을 기준으로 한다.
+엔더 드래곤 격파와 인간·AI 협업까지의 전체 과정은 [MASTER PLAN](MASTER_PLAN.md)을 따른다.
 설치와 실행은 [프로젝트 README](../README.md)와 [Docker 문서](../docker/README.md)를 따른다.
 
 | 목적 | 문서 |
 |---|---|
+| 최종 목표·단계별 완료 기준 | [MASTER PLAN](MASTER_PLAN.md) |
 | 관측 데이터 형식 | [관측 규약](OBSERVATION.md) |
+| 핫바 선택·인벤토리 제어 | [인벤토리 규약](INVENTORY.md) |
+| 개인 제작 칸의 판자·막대·작업대 제작 | [2×2 제작](CRAFTING.md) |
 | 직접 채굴·이동·수집 | [채굴](MINING.md), [평지 접근·수집](NAVIGATION.md) |
 | 원목 목표·버전 지정 실행 | [wood 동작](WOOD_GOAL.md), [스킬 등록](SKILLS.md) |
 | 실행 상태 조회·취소 | [취소 규약](CANCELLATION.md) |

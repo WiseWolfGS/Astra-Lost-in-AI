@@ -83,6 +83,16 @@ class Look(StrictModel):
 class Stop(StrictModel):
     type: Literal["stop"]
 
+class SelectHotbar(StrictModel):
+    type: Literal["select_hotbar"]
+    slot: int = Field(ge=0, le=8, strict=True)
+    expectedItem: str = Field(pattern=r"^[a-z0-9_.-]+:[a-z0-9_./-]+$", max_length=128)
+
+class Craft(StrictModel):
+    type: Literal["craft"]
+    recipe: Literal["oak_planks", "spruce_planks", "birch_planks", "jungle_planks",
+                    "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "stick", "crafting_table"]
+
 class Mine(StrictModel):
     type: Literal["mine"]
     x: int = Field(ge=-29999999, le=29999999, strict=True)
@@ -105,7 +115,7 @@ class Plan(StrictModel):
     action: Action
 
 class DirectAction(StrictModel):
-    action: Annotated[Action, Field(discriminator="type")]
+    action: Annotated[Action | SelectHotbar | Craft, Field(discriminator="type")]
 
 class Step(StrictModel):
     goal: str = Field(default="주변을 관찰하고 안전한 다음 행동을 정한다.", max_length=2000)
@@ -222,7 +232,7 @@ async def execute_action(action, before):
             before["observation"].get("player", {}).get("dimension")):
         raise HTTPException(409, "Minecraft state changed during planning")
     timed = action.type in ("mine", "approach", "collect")
-    if timed and action.type not in current["observation"].get("capabilities", []):
+    if (timed or action.type in ("select_hotbar", "craft")) and action.type not in current["observation"].get("capabilities", []):
         raise HTTPException(409, "Restart Minecraft with support for " + action.type)
     if control and control.cancel_requested:
         return cancelled_before_dispatch()
@@ -234,7 +244,7 @@ async def execute_action(action, before):
     if control:
         control.dispatch_pending = False
         control.action_id = queued["id"]
-    checks = 4 * (action.timeoutTicks // 20 + 10) if timed else 32
+    checks = 80 if action.type == "craft" else 4 * (action.timeoutTicks // 20 + 10) if timed else 32
     result = queued
     cancellation_attempted = False
     try:

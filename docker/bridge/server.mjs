@@ -6,6 +6,13 @@ export function validateAction(a) {
   if (!a || typeof a !== 'object' || Array.isArray(a)) return false;
   const keys = Object.keys(a).sort().join(',');
   if (a.type === 'stop') return keys === 'type';
+  if (a.type === 'craft') return keys === 'recipe,type' &&
+    ['oak_planks','spruce_planks','birch_planks','jungle_planks','acacia_planks',
+     'dark_oak_planks','mangrove_planks','cherry_planks','stick','crafting_table'].includes(a.recipe);
+  if (a.type === 'select_hotbar') return keys === 'expectedItem,slot,type' &&
+    Number.isInteger(a.slot) && a.slot >= 0 && a.slot <= 8 &&
+    typeof a.expectedItem === 'string' && a.expectedItem.length <= 128 &&
+    /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(a.expectedItem);
   if (a.type === 'collect') return keys === 'entityId,timeoutTicks,type' &&
     Number.isInteger(a.entityId) && a.entityId >= 0 && a.entityId <= 2147483647 &&
     Number.isInteger(a.timeoutTicks) && a.timeoutTicks >= 20 && a.timeoutTicks <= 200;
@@ -91,7 +98,7 @@ export function createBridge(token, now = Date.now) {
         let command = undefined;
         if (pending && !pending.delivered && body.ready && !body.busy) {
           pending.delivered = true;
-          pending.expiresAt = now() + (['mine','approach','collect'].includes(pending.action.type) ? pending.action.timeoutTicks*50+4000 : 5000);
+          pending.expiresAt = now() + (pending.action.type === 'craft' ? 14000 : ['mine','approach','collect'].includes(pending.action.type) ? pending.action.timeoutTicks*50+4000 : 5000);
           remember(pending.id,'running');
           command = {id:pending.id, action:pending.action};
         }
@@ -103,7 +110,7 @@ export function createBridge(token, now = Date.now) {
       if (req.method === 'POST' && req.url === '/v1/actions') {
         if (!validateAction(body)) return send(400,{error:'invalid action'});
         if (!observation?.ready || now()-seenAt > 5000) return send(409,{error:'Minecraft not ready'});
-        if (['mine','approach','collect'].includes(body.type) && !observation.capabilities?.includes(body.type))
+        if (['mine','approach','collect','select_hotbar','craft'].includes(body.type) && !observation.capabilities?.includes(body.type))
           return send(409,{error:'Minecraft client upgrade required for '+body.type});
         if (pending || observation.busy) return send(409,{error:'action already in progress'});
         const id = randomUUID();

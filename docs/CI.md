@@ -50,7 +50,7 @@ Python 보고서는 Docker cp로 회수할 수 있도록 /tmp에 기록한다. �
 
 ## 검증 상태
 
-로컬 Fabric build 성공(Java 27개), Python 88개·Node 18개 및 합성 연결·취소 확인 시험 통과.
+로컬 Fabric build 성공(Java 32개), Python 107개·Node 22개 및 합성 연결·취소 확인 시험 통과.
 보고서 생성·회수와 테스트 환경 정리까지 검증했으며 actionlint로 워크플로 구문을 확인했다.
 Linux용 wrapper 줄바꿈은 .gitattributes에서 LF로 고정하고 bash로 실행한다.
 

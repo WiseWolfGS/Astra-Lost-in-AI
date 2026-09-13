@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('observe', 'perception', 'mine', 'approach', 'collect', 'wood', 'step', 'health', 'execution', 'cancel', 'skills', 'skill-check', 'skill-run')][string]$Operation = 'observe',
+    [ValidateSet('observe', 'perception', 'mine', 'approach', 'collect', 'wood', 'step', 'health', 'execution', 'cancel', 'skills', 'skill-check', 'skill-run', 'select-hotbar', 'craft')][string]$Operation = 'observe',
     [string]$Goal = '주변을 관찰하고 안전한 다음 행동을 정한다.',
     [ValidateRange(20,200)][int]$TimeoutTicks = 200,
     [ValidateRange(-1,2147483647)][int]$EntityId = -1,
@@ -10,7 +10,9 @@ param(
     [Guid]$ExecutionId = [Guid]::Empty,
     [Guid]$ActionId = [Guid]::Empty,
     [ValidatePattern('^[a-z][a-z0-9_-]*$')][string]$SkillId = 'wood',
-    [string]$SkillVersion = '1.1.0'
+    [string]$SkillVersion = '1.1.0',
+    [ValidateRange(0,8)][int]$Slot = 0,
+    [ValidateSet('oak_planks','spruce_planks','birch_planks','jungle_planks','acacia_planks','dark_oak_planks','mangrove_planks','cherry_planks','stick','crafting_table')][string]$Recipe = 'oak_planks'
 )
 $ErrorActionPreference = 'Stop'
 if ($Operation -eq 'health') {
@@ -21,7 +23,18 @@ $tokenLine = Get-Content -LiteralPath $EnvFile |
     Where-Object { $_ -match '^BRIDGE_TOKEN=' } | Select-Object -First 1
 if (!$tokenLine) { throw 'Run setup.ps1 first' }
 $headers = @{Authorization = 'Bearer ' + $tokenLine.Substring('BRIDGE_TOKEN='.Length)}
-if ($Operation -in @('skills','skill-check','skill-run')) {
+if ($Operation -eq 'craft') {
+    $body = @{action=@{type='craft';recipe=$Recipe}} | ConvertTo-Json -Depth 5
+    Invoke-RestMethod 'http://127.0.0.1:8000/v1/act' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 35 | ConvertTo-Json -Depth 25
+} elseif ($Operation -eq 'select-hotbar') {
+    $snapshot = Invoke-RestMethod 'http://127.0.0.1:8000/v1/observation' -Headers $headers -TimeoutSec 10
+    if (!$snapshot.connected -or !$snapshot.observation.ready) { throw 'Enter an unpaused survival world first.' }
+    if ($snapshot.observation.capabilities -notcontains 'select_hotbar') { throw 'Restart Minecraft with support for select_hotbar.' }
+    $stack = @($snapshot.observation.player.inventory | Where-Object slot -eq $Slot)
+    $expected = if ($stack.Count) { $stack[0].item } else { 'minecraft:air' }
+    $body = @{action=@{type='select_hotbar';slot=$Slot;expectedItem=$expected}} | ConvertTo-Json -Depth 5
+    Invoke-RestMethod 'http://127.0.0.1:8000/v1/act' -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 30 | ConvertTo-Json -Depth 25
+} elseif ($Operation -in @('skills','skill-check','skill-run')) {
     $url = 'http://127.0.0.1:8000/v1/skills'
     if ($Operation -eq 'skill-check') { $url += "/$SkillId/check" }
     if ($Operation -eq 'skill-run') {

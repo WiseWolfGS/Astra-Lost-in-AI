@@ -1,6 +1,8 @@
 # AstraLostInAI
 
 Minecraft Java **1.21.1 Survival**을 AI가 플레이하도록 만드는 프로젝트다.
+최종 목표는 AI의 엔더 드래곤 격파이며, 인간 및 다른 AI와의 협업을 부가 목표로 한다.
+전체 구현 과정과 완료 기준은 [MASTER PLAN](docs/MASTER_PLAN.md)에 정리했다.
 Fabric 클라이언트 모드가 현재 플레이어의 관측과 제한된 행동을 제공하고,
 별도 Docker 환경의 Python 에이전트와 Node.js 브리지가 이를 연결한다.
 
@@ -107,7 +109,7 @@ wood 성공은 result.reason=log_inventory_increased와 inventoryDelta>=1로 확
 
 [문서 안내](docs/README.md)에서 사용법·진행 상태·오류 보고서를 찾을 수 있다.
 
-Fabric 빌드와 Java 27개, Python 88개·Node 18개 테스트 및 합성 취소 연결 시험을 통과했다.
+Fabric 빌드와 Java 32개, Python 107개·Node 22개 테스트 및 합성 취소 연결 시험을 통과했다.
 이전 커밋의 GitHub CI 두 작업과 보고서는 사용자가 성공을 확인했다. 이번 취소 변경의 원격 CI는 Push 후 확인한다.
 사용자가 취소 명령의 실제 월드 테스트 성공을 확인했다.
 실제 월드에서 동일 실패 위치의 드롭 수집과 approach→mine→collect 전체 목표 성공을 확인했다.

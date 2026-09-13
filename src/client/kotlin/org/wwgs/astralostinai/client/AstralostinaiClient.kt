@@ -31,6 +31,7 @@ class AstralostinaiClient : ClientModInitializer {
     private var result: Map<String, Any>? = null
     private var mining: MiningController? = null
     private var navigation: NavigationController? = null
+    private var crafting: CraftingController? = null
     private var lastError = 0L
     private lateinit var config: JsonObject
     override fun onInitializeClient() {
@@ -45,6 +46,13 @@ class AstralostinaiClient : ClientModInitializer {
         }
         require(config.get("token").asString.length >= 32) { "Bridge token must have at least 32 characters" }
         ClientTickEvents.START_CLIENT_TICK.register { client ->
+            if (crafting != null) {
+                if (!isReady(client)) release(client, "cancelled")
+                else {
+                    val outcome = crafting!!.tick()
+                    if (outcome != null) { result = outcome; crafting = null; activeId = null }
+                }
+            }
             if (mining != null) {
                 if (!isReady(client)) release(client, "cancelled")
                 else {
@@ -85,12 +93,14 @@ class AstralostinaiClient : ClientModInitializer {
         client.options.sprintKey.isPressed = false
         client.player?.isSprinting = false
         val outcome = mining?.finish(status, reason)
+            ?: crafting?.finish(status, reason)
             ?: navigation?.finish(status, reason)
             ?: mapOf("id" to activeId!!, "status" to status, "reason" to reason)
         @Suppress("UNCHECKED_CAST")
         val details = (outcome["details"] as? Map<String, Any>) ?: emptyMap()
         result = outcome + ("details" to (details + ("inputsReleased" to true)))
         mining = null
+        crafting = null
         navigation = null
         activeId = null
         remaining = 0
@@ -112,8 +122,8 @@ class AstralostinaiClient : ClientModInitializer {
             "session" to session, "protocol" to 1, "ready" to ready,
             "busy" to (activeId != null), "result" to result
         )
-        state["capabilities"] = listOf("move", "look", "stop", "mine", "approach", "collect", "cancel")
-        state["activeAction"] = mining?.progress() ?: navigation?.progress()
+        state["capabilities"] = listOf("move", "look", "stop", "mine", "approach", "collect", "cancel", "select_hotbar", "craft")
+        state["activeAction"] = crafting?.progress() ?: mining?.progress() ?: navigation?.progress()
             ?: activeId?.let { mapOf("id" to it, "type" to "move", "remainingTicks" to remaining) }
         if (player != null && world != null) {
             state["player"] = mapOf(
@@ -150,7 +160,11 @@ class AstralostinaiClient : ClientModInitializer {
             client.execute {
                 busy = false
                 try {
-                    check(error == null && response.statusCode() == 200) { "Bridge request failed" }
+                    if (error != null) throw error
+                    check(response != null) { "Bridge response was missing" }
+                    check(response.statusCode() == 200) {
+                        "Bridge HTTP ${response.statusCode()}: ${response.body().take(160)}"
+                    }
                     if (result == sentResult) result = null
                     val body = gson.fromJson(response.body(), JsonObject::class.java)
                     val cancellation = body.getAsJsonObject("cancel")
@@ -186,6 +200,35 @@ class AstralostinaiClient : ClientModInitializer {
         val id = command.get("id").asString
         val action = command.getAsJsonObject("action")
         when (action.get("type").asString) {
+            "craft" -> {
+                require(activeId == null)
+                val controller = CraftingController(client, id, action.get("recipe").asString)
+                val rejection = controller.begin()
+                if (rejection != null) result = rejection
+                else { crafting = controller; activeId = id }
+            }
+            "select_hotbar" -> {
+                require(activeId == null)
+                val player = requireNotNull(client.player)
+                val slot = action.get("slot").asInt
+                val expected = action.get("expectedItem").asString
+                val actual = if (slot in 0..8) Registries.ITEM.getId(player.inventory.getStack(slot).item).toString() else ""
+                val rejection = org.wwgs.astralostinai.HotbarSelection.rejection(slot, expected, actual,
+                    player.isUsingItem || player.currentScreenHandler !== player.playerScreenHandler ||
+                        !player.currentScreenHandler.cursorStack.isEmpty)
+                if (rejection != null) {
+                    result = mapOf("id" to id, "status" to "rejected", "reason" to rejection)
+                } else {
+                    val previous = player.inventory.selectedSlot
+                    val network = requireNotNull(client.networkHandler)
+                    network.sendPacket(net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket(slot))
+                    player.inventory.selectedSlot = slot
+                    result = mapOf("id" to id, "status" to "completed", "reason" to "hotbar_selected",
+                        "details" to mapOf("previousSlot" to previous, "selectedSlot" to slot,
+                            "item" to actual, "packetSent" to true, "verification" to "client_selection",
+                            "serverConfirmed" to false))
+                }
+            }
             "approach", "collect" -> {
                 require(activeId == null)
                 val collect = action.get("type").asString == "collect"
