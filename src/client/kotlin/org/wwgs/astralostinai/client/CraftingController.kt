@@ -40,7 +40,7 @@ class CraftingController(private val client: MinecraftClient, private val id: St
     private val produced = if (tool != null || recipe == "crafting_table") 1 else 4
     private fun item(stack: ItemStack) = Registries.ITEM.getId(stack.item).toString()
     private fun matches(stack: ItemStack) = if (tool?.material() == "stone_tool_materials")
-        stack.isIn(net.minecraft.registry.tag.ItemTags.STONE_TOOL_MATERIALS)
+        item(stack) in STONE_MATERIALS || stack.isIn(net.minecraft.registry.tag.ItemTags.STONE_TOOL_MATERIALS)
         else if (input == "#planks") item(stack) in WOODS.map { "minecraft:${it}_planks" } else item(stack) == input
     private fun countInput() = server.filterKeys { it in grid || it in inventorySlots }.values.sumOf { if (matches(it)) it.count else 0 }
     private fun countSticks() = server.filterKeys { it in grid || it in inventorySlots }.values.sumOf { if (item(it) == "minecraft:stick") it.count else 0 }
@@ -97,3 +97,4 @@ class CraftingController(private val client: MinecraftClient, private val id: St
     }
 }
 private val WOODS = listOf("oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry")
+private val STONE_MATERIALS = listOf("minecraft:cobblestone", "minecraft:cobbled_deepslate", "minecraft:blackstone")

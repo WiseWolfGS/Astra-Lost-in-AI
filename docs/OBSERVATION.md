@@ -59,36 +59,10 @@ connected=false인 과거 관측은 현재 월드 상태로 사용하면 안 된
 대표 위치만으로 그 블록까지의 경로를 알 수 없으며, 인접 열 검사는 경로 탐색이나 안전 검증이 아니다.
 에피소드 before/after에는 전체 원본 격자가 남는다.
 
-## 적용 및 수락 시험
+## 수락 시험
 
-Docker agent는 갱신된 이미지로 실행한다. Fabric은 기존 게임을 정상 종료한 뒤 프로젝트에서:
-
-```powershell
-.\scripts\dev.ps1 -Task runClient
-```
-
-테스트 월드에 들어가 F3+P로 포커스 상실 시 일시정지를 해제하고 메뉴를 닫는다.
-Docker 폴더에서:
-
-```powershell
-.\invoke-agent.ps1 -Operation perception
-```
-
-1. connected=true, perception.available=true인지 확인한다.
-2. here.below가 발 아래 블록과 일치하는지 확인한다.
-3. 블록을 바라보면 target.type=block과 좌표가 맞고, 하늘을 바라보면 miss가 되는지 확인한다.
-4. 가까운 나무·물·장애물의 종류와 대표 좌표를 실제 위치와 비교한다.
-5. 엔티티를 가까이 두고, 반경·가림에 따른 포함 여부를 확인한다. 빈 entities는 주변 조건에 따라 정상이다.
-6. 메뉴 진입/월드 종료로 ready 또는 connected가 달라지는지 기존 observe 명령으로 확인한다.
-
-관측만 확인하는 위 시험은 유료 호출을 발생시키지 않는다.
-실제 Astra 입력 전달을 재확인하려면 아래를 한 번 실행한다(현재 DRY_RUN=false이면 과금 가능).
-
-```powershell
-.\invoke-agent.ps1 -Operation step -Goal '주변 관측의 블록 종류를 reason에 요약하고 stop 행동을 선택해라.'
-```
-
-2026-09-12 사용자 후속 보고로 환경 관측 실게임 시험을 통과했다.
-작업 시작 시 읽은 마지막 관측에서도 available=true, 486칸, 원목/잎 종류와 block target을 확인했다.
-이때 connected=false였으므로 해당 자료는 마지막 저장 관측으로 해석했다.
-신규 채굴 기능의 시험 상태는 [채굴 문서](MINING.md)에서 별도로 관리한다.
+[공통 준비](README.md) 후 `.\docker\invoke-agent.ps1 -Operation perception`을 실행한다.
+connected=true와 perception.available=true, here.below의 실제 바닥 일치,
+블록/하늘 조준 시 target의 block/miss 전환, 가까운 블록 종류·좌표와 엔티티 가림/반경을 확인한다.
+빈 entities는 주변 조건에 따라 정상이다. 메뉴·월드 종료 시 observe의 ready/connected 변화도 확인한다.
+연결이 끊긴 마지막 관측을 현재 상태로 해석하지 않는다. 현재 검증은 [진행 상태](PROGRESS.md)를 따른다.

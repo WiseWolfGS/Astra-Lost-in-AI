@@ -62,53 +62,19 @@ heartbeat가 5초 이상 끊어지면 결과 조회 시 expired로 처리된다.
 서버/클라이언트 지연으로 틱이 느려져도 무기한 채굴하지 않는다.
 stop은 기존 단일 큐 정책상 진행 중 작업을 선점하지 않으므로, 수동 중단은 게임 메뉴를 연다.
 
-## 직접 시험 — 모델 호출 없음
+## 직접 시험
 
-새 클라이언트 실행 후 테스트 서바이벌 월드에 들어간다.
-F3+P로 포커스 상실 시 일시정지를 해제하고 메뉴를 닫는다.
-접근 가능한 흙이나 원목 하나를 바라보고 PowerShell에서:
+[공통 준비](README.md) 후 도달 가능한 흙/원목을 조준한다.
 
 ```powershell
-cd C:\Projects\AstraLostInAI\docker
-.\invoke-agent.ps1 -Operation perception
-.\invoke-agent.ps1 -Operation mine
+.\docker\invoke-agent.ps1 -Operation mine
+.\docker\invoke-agent.ps1 -Operation mine -TimeoutTicks 20
 ```
 
-mine 명령은 현재 target 좌표를 읽어 POST /v1/act에 전달한다.
-이 직접 실행은 **DRY_RUN=true여도 게임 행동을 실행**한다. OpenAI 호출은 없고 에피소드는 model_called=false로 기록된다.
-수동 API의 본문은 {"action": 위의 mine 객체}다. 모든 요청에 bearer 인증이 필요하다.
+명령은 현재 target을 읽어 POST /v1/act의 action 객체로 보낸다. 모델 호출 없이 실제 채굴한다.
+한 블록만 사라지는지, 뒤 블록은 유지되는지, inventoryDelta가 실제 변화와 맞는지 확인한다.
+메뉴·시선 변경으로 cancelled, 맨손 돌 채굴은 unsuitable_tool,
+느린 원목에 20틱 예산은 timed_out과 입력 해제를 확인한다. 원격 중단은 [cancel](CANCELLATION.md)을 사용한다.
 
-수락 시험:
-
-1. 원목/흙 한 블록이 사라지고 completed가 반환되는지 확인한다.
-2. 뒤쪽 블록은 그대로 남는지 확인한다.
-3. 인벤토리 변화가 있으면 inventoryDelta와 실제 아이템을 비교한다. 변화가 없다고 파괴 실패로 판단하지 않는다.
-4. 느린 블록 채굴 중 메뉴를 열거나 시선을 돌렸을 때 cancelled가 되는지 확인한다.
-5. 맨손으로 돌을 바라보고 실행했을 때 unsuitable_tool로 거절되는지 확인한다.
-6. 맨손 원목을 바라보고 아래 명령으로 짧은 예산을 줬을 때 timed_out과 입력 해제를 확인한다.
-
-```powershell
-.\invoke-agent.ps1 -Operation mine -TimeoutTicks 20
-docker compose exec -T agent tail -n 1 /data/episodes.jsonl
-```
-
-## Astra가 채굴을 선택하도록 시험
-
-직접 채굴이 검증된 뒤 같은 조건에서:
-
-```powershell
-.\invoke-agent.ps1 -Operation step -Goal '현재 바라보는 원목 블록 하나만 mine으로 채굴해라. 이동하지 말고 timeoutTicks는 200으로 지정해라.'
-```
-
-현재 DRY_RUN=false이면 모델 호출에 과금될 수 있다. Plan에 mine이 추가되었고 실제 실행기는 직접 시험과 동일하다.
-관측의 target에 canHarvest, hardness, inReach가 포함되며, 모델은 현재 target과 동일한 좌표만 고르도록 안내받는다.
-에피소드는 계획, 실행 결과, 전후 관측을 저장한다. 자동 반복이나 재시도는 없다.
-
-## 검증 상태
-
-초기 채굴 구현 당시: Fabric 빌드와 Java 6개/Python 23개/Node 8개, 총 37개 자동 테스트 통과.
-후속 기능을 포함한 최신 기준선은 [진행 상태](PROGRESS.md)를 따른다.
-실제 클라이언트 기동과 mine capability 전송을 확인한 뒤 사용자가 채굴 실행 성공을 보고했다.
-에피소드에서도 direct mine의 원목→공기와 completed를 확인했다. 해당 에피소드의 inventoryDelta는 빈 맵이었다.
-유료 mine 호출의 별도 에피소드는 이번 확인 자료에 없으므로 direct 채굴 증거와 구분한다.
-짧은 접근과 수집 코드를 후속 구현했으며 사용자 시험은 [접근·수집 문서](NAVIGATION.md)를 참고한다.
+step의 모델 Plan도 mine을 허용하지만 한 번의 계획·행동만 실행한다. DRY_RUN=false이면 모델 과금 가능성이 있다.
+현재 검증은 [진행 상태](PROGRESS.md)를 따른다. 기존 직접 채굴 성공 기록은 유료 모델 채굴의 증거와 구분한다.

@@ -28,16 +28,11 @@ POST /v1/act 본문:
    - 타임아웃은 100틱/벽시계 7초(브리지 실행 기한 14초)다.
    - 성공 결과는 `completed/workbench_placed`이며 `details.verification=client_observation`, `inventoryConsumed=1`, `blockObserved=true`를 기록한다.
 
-3. **후속 계획: 작업대 상호작용 및 3×3 도구 제작**:
-   - 배치된 작업대를 우클릭하여 3×3 제작 화면(`CraftingScreenHandler`)을 열고 기본 나무 도구(곡괭이, 도끼, 칼, 삽) 및 돌 도구 제작으로 확장한다.
+후속 제작은 [3×3 도구 제작](WORKBENCH_CRAFTING.md)을 사용한다.
 
 ## 사용자 테스트
 
-게임이 실행 중이면 월드를 저장하고 정상 종료한 뒤 수정 모드를 실행한다. 서바이벌 월드에서 메뉴를 닫는다.
-
-```powershell
-.\scripts\dev.ps1 -Task runClient
-```
+[공통 준비](README.md) 후 아래 조건으로 실행한다.
 
 1. 참나무 원목을 채집하고 2×2 제작을 통해 작업대를 확보한다:
 ```powershell
@@ -72,6 +67,4 @@ POST /v1/act 본문:
 
 ## 검증 상태
 
-Fabric build와 Java 33개, Python 113개, Node 23개 및 격리 연결 시험 통과.
-입력 스키마의 바닥 종류·범위 제한과 인벤토리 소비·블록 관측 증거 함수를 자동 검사했다.
-후속 사용자 테스트에서 작업대 설치 성공을 확인했다. 3×3 제작의 실게임 확인은 별도로 남아 있다.
+현재 자동·실게임 확인과 남은 작업은 [진행 상태](PROGRESS.md)에서 관리한다.

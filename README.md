@@ -83,9 +83,12 @@ cd C:\Projects\AstraLostInAI
 | mine | 현재 도구와 조준 대상으로 단일 블록 채굴 | 없음 |
 | collect | 관측된 아이템으로 이동 후 획득 검증 | 없음 |
 | select-hotbar | 핫바 0~8번 슬롯 직접 선택 | 없음 |
+| move-hotbar | 일반 인벤토리와 핫바 슬롯 1회 교환 | 없음 |
 | craft | 개인 2×2 제작 칸에서 레시피 1회 제작 | 없음 |
 | place-workbench | 손에 든 작업대를 조준된 바닥 블록 윗면에 설치 | 없음 |
+| craft-workbench | 설치된 작업대에서 3×3 도구(나무/돌) 1회 제작 | 없음 |
 | wood | 최대 3행동·60초로 원목 인벤토리 증가 시도 | 없음 |
+| craft_tool (skill-run) | 최대 3행동·60초로 도구 제작·핫바 이동·선택 완주 | 없음 |
 | step | 관측 → 계획 한 번 → 행동 하나 | DRY_RUN=false에서 호출 |
 
 직접 행동과 wood는 **DRY_RUN=true여도 실제 게임에서 실행**한다.
@@ -112,8 +115,8 @@ wood 성공은 result.reason=log_inventory_increased와 inventoryDelta>=1로 확
 
 [문서 안내](docs/README.md)에서 사용법·진행 상태·오류 보고서를 찾을 수 있다.
 
-Fabric 빌드와 Java 39개, Python 135개·Node 26개 테스트 및 합성 취소 연결 시험을 통과했다.
-돌 도구 5종 제작을 추가했다. 재료 준비와 실게임 확인은 [돌 도구 테스트](docs/STONE_TOOLS.md)를 따른다.
+Fabric 빌드와 Java 39개, Python 146개·Node 26개 테스트 및 합성 취소 연결 시험을 통과했다.
+돌 도구 5종 제작 및 `craft_tool@1.0.0` 등록 스킬을 추가했다. 재료 준비와 실게임 확인은 [돌 도구 테스트](docs/STONE_TOOLS.md) 및 [스킬 규약](docs/SKILLS.md)을 따른다.
 이전 커밋의 GitHub CI 두 작업과 보고서는 사용자가 성공을 확인했다. 이번 취소 변경의 원격 CI는 Push 후 확인한다.
 사용자가 취소 명령 및 핫바 선택, 2×2 제작의 실제 월드 테스트 성공을 확인했다.
 실제 월드에서 동일 실패 위치의 드롭 수집과 approach→mine→collect 전체 목표 성공을 확인했다.
@@ -123,8 +126,11 @@ Fabric 빌드와 Java 39개, Python 135개·Node 26개 테스트 및 합성 취�
 - [현재 진행 상태](docs/PROGRESS.md)
 - [관측 규약](docs/OBSERVATION.md)
 - [핫바 선택·인벤토리 제어](docs/INVENTORY.md)
+- [일반 인벤토리 → 핫바 이동](docs/HOTBAR_TRANSFER.md)
 - [2×2 제작 규약](docs/CRAFTING.md)
 - [작업대 설치 및 상호작용](docs/WORKBENCH.md)
+- [작업대 3×3 도구 제작](docs/WORKBENCH_CRAFTING.md)
+- [돌 도구 제작](docs/STONE_TOOLS.md)
 - [채굴 규약](docs/MINING.md)
 - [평지 접근·수집](docs/NAVIGATION.md)
 - [원목 목표와 사용자 테스트](docs/WOOD_GOAL.md)

@@ -57,52 +57,21 @@ collect의 대체 후보는 다른 원목 드롭으로 제한한다. 취소·체
 
 ## 사용자 시험
 
-이번 변경은 Docker agent만 갱신했다. 기존 approach/collect 지원 모드를 그대로 사용한다.
-게임이 종료되어 있으면 프로젝트 폴더에서 `.\scripts\dev.ps1 -Task runClient`로 실행한다.
-서바이벌의 넓고 평평한 흙/잔디에 서고 F3+P로 포커스 상실 시 일시정지를 해제한 뒤 메뉴를 닫는다.
-
-별도 PowerShell:
+[공통 준비](README.md) 후 평지의 가까운 원목/드롭에서 실행한다.
 
 ```powershell
-cd C:\Projects\AstraLostInAI\docker
-.\invoke-agent.ps1 -Operation observe
-.\invoke-agent.ps1 -Operation wood
+.\docker\invoke-agent.ps1 -Operation wood
+.\docker\invoke-agent.ps1 -Operation wood -MaxActions 1
 ```
 
-### A. 드롭 하나 수집
+| 조건 | 확인 |
+|---|---|
+| 원목을 던진 뒤 1~2블록 물러남 | 던진 이후 인벤토리 기준, collect 및 순증가 +1 이상 |
+| 드롭 없이 수평 3~4블록 원목 | approach→mine→필요 시 collect, 최종 log_inventory_increased |
+| 드롭 없이 MaxActions 1 | 접근 후 순증가가 없으면 action_budget_exhausted, 추가 채굴 없음 |
+| 실행 중 메뉴 또는 cancel | 입력 해제·다음 행동 억제 |
+| 범위 안 원목/드롭 없음 | no_local_log_or_drop, steps=[] |
 
-Q로 원목 하나를 바닥에 던지고 1~2블록 물러난다. 드롭이 땅에 내려앉은 후 wood를 실행한다.
-드롭을 만들기 **이후**의 인벤토리가 기준이다. steps가 collect 하나이고 목표 성공과 inventoryDelta>=1인지 확인한다.
-개별 collect 결과의 pickupPacketCount와 verifiedCollectedCount도 1 이상이어야 한다.
-
-### B. 원목 접근 → 채굴 → 획득
-
-기존 드롭이 없는 평지에서 수평 3~4블록 이내의 원목 옆에 선다. 원목을 미리 조준할 필요는 없다.
-wood를 실행하고 steps에 approach → mine → 필요 시 collect가 기록되는지 확인한다.
-블록 파괴만으로는 성공이 아니다. 최종 인벤토리가 시작보다 1개 이상 증가해야 한다.
-나무 밑 원목 주변에 구멍이나 단차가 있으면 실패할 수 있으므로 첫 시험은 연속된 평지에서 진행한다.
-
-### C. 예산 및 중단
-
-드롭이 없는 원목 근처에서:
-
-```powershell
-.\invoke-agent.ps1 -Operation wood -MaxActions 1
-```
-
-접근이 정상 완료되고 추가 원목을 자동 획득하지 않았다면 `action_budget_exhausted`로 끝나고 채굴하지 않아야 한다.
-별도 정상 wood 실행 중 Esc를 누르면 중단되고 다음 행동으로 넘어가지 않아야 한다.
-주변에 원목/드롭이 없으면 `no_local_log_or_drop`, steps=[]가 정상이다.
-
-### 기록 확인
-
-```powershell
-docker compose exec -T agent tail -n 1 /data/episodes.jsonl
-```
-
-HTTP 요청이 오류 없이 끝났다는 것과 목표 달성은 구분한다. 판정에는 위 result와 inventoryDelta를 사용한다.
-실제 월드의 collect 두 번과 approach→mine→collect 전체 연결의 성공을 확인했다.
-최신 자동·실게임 검증 기준선은 [진행 상태](PROGRESS.md)를 따른다.
-초기 이동 오류 수정 이력은 [수정 보고서](NAVIGATION_FIX.md)를 참조한다.
-
-버전별 등록·조회·실행은 [스킬 문서](SKILLS.md), 다음 작업은 [개발 계획](ROADMAP.md)을 따른다.
+`-FullRecord`로 원본 기록을 확인한다. 수동 아이템 이동·동시 원목 획득을 피하고 HTTP 성공과 목표 성공을 구분한다.
+최신 검증은 [진행 상태](PROGRESS.md), 버전별 실행은 [스킬](SKILLS.md),
+후보 범위 밖 종료는 [실패 진단](WOOD_FAILURE_DIAGNOSIS.md)을 따른다.

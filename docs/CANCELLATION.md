@@ -39,20 +39,7 @@ Python의 취소 요청·조회 예산은 최대 8초다. 반복 취소로 브�
 
 ## 적용과 사용자 테스트
 
-저장소 루트의 PowerShell에서 실행한다. 운영 설정은 docker/.env다.
-
-```powershell
-.\docker\compose.ps1 -ComposeArguments @('up','-d','--build','--wait')
-.\scripts\dev.ps1 -Task runClient
-```
-
-이미 실행 중인 Minecraft에는 새 모드가 적용되지 않는다. 월드를 저장하고 정상 종료한 뒤 다시 실행한다.
-서바이벌 테스트 월드에서 F3+P로 포커스 상실 시 일시정지를 끄고 메뉴를 닫는다.
-관측 capabilities에 cancel이 포함되는지 확인한다.
-
-```powershell
-.\docker\invoke-agent.ps1 -Operation observe
-```
+[공통 준비](README.md) 후 관측 capabilities에 cancel이 포함되는지 확인한다.
 
 1. 맨손으로 천천히 캐지는 블록을 조준한다. 첫 PowerShell에서 아래 채굴을 시작한다.
 
@@ -84,8 +71,5 @@ actionResult.details.inputsReleased=true, actionResult.cancelConfirmed=true인 �
 
 ## 검증 범위
 
-취소 구현 시 Java 24개, Python 69개, Node 18개 및 격리된 agent→bridge→합성 클라이언트 취소 왕복을 통과했다.
-후속 변경을 포함한 현재 전체 테스트 수는 [진행 상태](PROGRESS.md)를 따른다.
 자동 시험은 ID·세션 일치, 실행 잠금 우회, 완료 경합, 중복 취소, 연결 단절, 목표 단계 사이 취소를 다룬다.
-사용자가 실제 게임에서 -Operation cancel의 테스트 성공을 확인했다.
-모든 연결 단절·완료 경합·지형 조건을 실게임에서 검증했다는 뜻은 아니며 추가 재현에는 위 절차를 사용한다.
+기존 사용자 실게임 성공 보고가 있으며 최신 결과와 미확인 범위는 [진행 상태](PROGRESS.md)를 따른다.

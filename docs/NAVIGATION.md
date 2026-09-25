@@ -63,85 +63,21 @@ mine의 inventoryDelta는 ID→개수 맵이고, collect는 선택한 아이템 
 
 ## 사용자 테스트
 
-새 모드를 사용하려면 기존 게임에서 월드를 저장하고 정상 종료한 뒤 실행한다.
-이미 새 클라이언트가 기동되어 있다면 해당 클라이언트로 테스트 월드에 들어간다.
+[공통 준비](README.md) 후 동일 높이의 넓은 평지에서 수평 3~4블록 이내 원목으로 시험한다.
 
 ```powershell
-cd C:\Projects\AstraLostInAI
-.\scripts\dev.ps1 -Task runClient
+.\docker\invoke-agent.ps1 -Operation approach
+.\docker\invoke-agent.ps1 -Operation mine
+.\docker\invoke-agent.ps1 -Operation collect -Item minecraft:oak_log
 ```
 
-서바이벌 월드에서 F3+P로 포커스 상실 시 일시정지를 해제하고 메뉴를 닫는다.
-별도 PowerShell에서:
+접근은 approach_verified와 조준·입력 해제를, 수집은 pickup_verified와 pickupPacketCount,
+inventoryDelta, verifiedCollectedCount가 모두 1 이상인지 확인한다. 채굴 중 자동 획득되었다면 collect 대상이 없는 것이 정상이다.
+수집만 시험하려면 원목을 Q로 던지고 1~2블록 물러나 내려앉기를 기다린다.
+특정 드롭은 관측된 ID로 `-Operation collect -EntityId 123`처럼 지정한다(123은 예시).
 
-```powershell
-cd C:\Projects\AstraLostInAI\docker
-.\invoke-agent.ps1 -Operation observe
-.\invoke-agent.ps1 -Operation perception
-```
-
-connected=true, ready=true이고 capabilities에 approach/collect가 있어야 한다.
-이하 직접 명령은 OpenAI 호출이 없으며, DRY_RUN=true여도 실제 게임 행동을 실행한다.
-
-### 1. 평지에서 블록 접근
-
-같은 높이의 넓고 평평한 땅에 서서 수평 3~4블록 거리의 원목 블록을 바라본다.
-나무 위·반 블록·물가 대신 처음에는 주변 바닥이 연속된 흙/잔디 평지에서 시험한다.
-
-```powershell
-.\invoke-agent.ps1 -Operation approach
-```
-
-성공 기준: result.status=completed, reason=approach_verified, 좌표 변화가 있고 대상 쪽으로 시선이 정렬된다.
-이미 가까웠다면 이동 거리가 작을 수 있다. 끝난 후 앞으로 계속 걷지 않아야 한다.
-
-### 2. 원목 채굴 후 드롭 획득
-
-```powershell
-.\invoke-agent.ps1 -Operation mine
-.\invoke-agent.ps1 -Operation perception
-.\invoke-agent.ps1 -Operation collect -Item minecraft:oak_log
-```
-
-실제로 떨어진 원목이 남아 있고 땅에 내려앉은 뒤 collect를 실행한다.
-채굴하면서 이미 원목을 획득했다면 수집 대상이 없는 것이 정상이다. 이 경우 인벤토리 원목 하나를
-Q로 던지고 1~2블록 물러나 아이템이 내려앉은 뒤 시험한다. 자동으로 먼저 주워지지 않았는지 확인한다.
-
-성공 기준: result.status=completed, reason=pickup_verified,
-pickupPacketCount>=1, inventoryDelta>=1, verifiedCollectedCount>=1이며 실제 인벤토리도 증가한다.
-아이템이 사라졌지만 이 조건이 없으면 성공으로 판정하지 않는다.
-
-여러 드롭 중 직접 선택하려면 perception에서 ID를 읽어:
-
-```powershell
-.\invoke-agent.ps1 -Operation collect -EntityId 123
-```
-
-123은 예시이므로 실제 ID로 바꾼다. -Item을 생략하면 관측된 땅 위 아이템 중 가까운 대상을 선택한다.
-
-### 3. 중단·경로 제한 시험
-
-- 접근 중 Esc 메뉴를 열면 cancelled와 입력 해제가 되어야 한다.
-- 같은 높이에서 장애물을 사이에 둔 대상: 우회 가능한 평지 경로가 있으면 우회하고, 없으면 no_flat_path/path_blocked로 끝나야 한다.
-- 계단이나 물을 반드시 지나야 하는 대상: 강행하지 않고 거절/중단해야 한다.
-- 긴 경로에 -TimeoutTicks 20을 주면 제한 시간 안에 완료하지 못한 경우 timed_out이 나와야 한다.
-
-```powershell
-.\invoke-agent.ps1 -Operation approach -TimeoutTicks 20
-docker compose exec -T agent tail -n 1 /data/episodes.jsonl
-```
-
-### 4. 선택적 Astra 시험 — 유료 설정이면 과금
-
-직접 시험을 통과한 뒤 드롭이 존재하는 상태에서 한 번:
-
-```powershell
-.\invoke-agent.ps1 -Operation step -Goal '관측에 있는 가까운 땅 위 참나무 원목 아이템 하나를 collect로 획득해라. timeoutTicks는 200으로 설정해라.'
-```
-
-plan.action이 collect이고 동일한 수집 증거를 반환하는지 확인한다.
-대상이 없다면 다시 드롭을 준비한다. 여러 행동을 연결하는 제한된 목표는 [wood 스킬](WOOD_GOAL.md)을 사용한다.
-
+메뉴 진입 시 중단, 우회 가능/불가능 경로, 단차·물 거절, `-TimeoutTicks 20`에서 예산 종료를 각각 확인한다.
+다중 행동 목표는 [wood](WOOD_GOAL.md)를 따른다. 모델 단일 행동은 step이며 유료 설정이면 과금될 수 있다.
 ## 결과 해석과 다음 단계
 
 | reason | 의미 / 대응 |

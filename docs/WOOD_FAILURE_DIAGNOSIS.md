@@ -1,6 +1,6 @@
 # wood@1.1.0 실행 실패 확인
 
-운영 에피소드에서 확인한 1.1.0 실행은 5건으로 원목 획득 성공 3건, 후보 선택 중단 2건이다.
+기존 운영 에피소드 분석에서 확인한 1.1.0 실행은 5건으로 원목 획득 성공 3건, 후보 선택 중단 2건이다.
 성공은 모두 inventoryDelta=1이며 두 중단은 steps가 비어 있고 reason=no_local_log_or_drop다.
 이 두 사례에서는 approach나 mine 명령을 전송하지 않았다.
 
@@ -23,6 +23,5 @@ no_local_log_or_drop는 관측에 원목이 전혀 없다는 뜻일 수도 있�
 .\docker\invoke-agent.ps1 -Operation skill-run -SkillVersion 1.1.0
 ```
 
-이번 확인은 저장된 실행 기록을 읽어 수행했으며 새 채굴이나 모델 호출은 하지 않았다.
-원본 에피소드 복사본은 Git 제외 local/diagnosis-episodes.jsonl에 보관한다.
-1.1.0의 실제 획득 성공은 확인했지만, 성공 기록의 수집 탐색은 passes=1이므로 반경 확대를 사용한 passes=2 경로까지 검증한 것은 아니다.
+과거 저장 기록의 분석이며 이번 문서 정리에서 월드·원본 에피소드를 재확인한 것은 아니다.
+성공한 수집은 passes=1이므로 반경 확대 passes=2의 실게임 검증은 남아 있다. 최신 상태는 [PROGRESS](PROGRESS.md)를 따른다.

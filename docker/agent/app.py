@@ -339,7 +339,8 @@ async def run_skill(skill, request):
                             "inputs": request.model_dump()}, "observationSchemaVersion": None}
         async def dispatch(action, before):
             return await execute_action(DirectAction(action=action).action, before)
-        runner = skill.runner(observe, dispatch, record, request.max_actions, control.check)
+        extra = {k: v for k, v in request.model_dump().items() if k != "max_actions"}
+        runner = skill.runner(observe, dispatch, record, request.max_actions, control.check, **extra)
         try:
             async with asyncio.timeout(skill.timeout_seconds):
                 await runner.run()
@@ -353,7 +354,7 @@ async def run_skill(skill, request):
             if record["steps"] and str(exc).startswith("action_"):
                 last = record["steps"][-1]
                 record["result"]["actionReason"] = last.get("result", {}).get("reason")
-                record["result"]["safetyFailure"] = last.get("result", {}).get("details", {}).get("safetyFailure")
+                record["result"]["safetyFailure"] = (last.get("result", {}).get("details") or {}).get("safetyFailure")
         except TimeoutError:
             record["result"] = {"status": "timed_out", "reason": "goal_timeout"}
         except HTTPException as exc:

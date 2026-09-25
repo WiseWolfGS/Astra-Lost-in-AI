@@ -1,24 +1,13 @@
 # 공개 저장소 포함·제외 기준
 
-## 포함할 파일
+포함: Fabric/Python/Node 소스·테스트, Gradle wrapper·lockfile, Dockerfile·Compose·실행 도구,
+비밀값 없는 설정 템플릿과 공개 문서. smoke Compose의 공개 테스트 토큰은 운영 인증 정보가 아니다.
 
-- Fabric 소스·테스트·Gradle 설정·wrapper 스크립트 및 wrapper JAR.
-- 공개용 README, API/동작 규약, 일반화한 오류 보고서, 개발 계획.
-- 비밀값이 없는 설정 템플릿. 환경변수 이름·loopback 포트·예시 좌표는 비밀값이 아니다.
-- docker/의 Python/Node 소스·테스트·Dockerfile·Compose 파일·lockfile·실행 도구 및 .env.example.
-- compose.smoke.yaml의 토큰은 외부에 포트를 공개하지 않는 합성 시험용 공개 상수이며 운영 인증 정보가 아니다.
+제외: `.env`와 변형 파일·API 키·브리지 토큰·개인키, 실제 설정 JSON,
+`run/` 월드·개인 설정·식별 데이터, 빌드·캐시·IDE 상태, 원본 에피소드·로그·개인 실험 기록.
+문서에는 개인 절대 경로·계정 설정·원본 실행 ID·월드 관측 대신 placeholder와 최소 합성 재현을 사용한다.
 
-## 로컬에만 둘 파일
-
-- .env와 변형 파일, API 키, 브리지 토큰, 개인키.
-- 실제 토큰이 들어 있는 astralostinai-bridge.json.
-- run 폴더의 월드·게임 설정·사용자 식별 데이터, 빌드·캐시·IDE 상태.
-- episodes*.jsonl, promptlog*.txt, *.log와 개인 실험 스크립트.
-
-공개 문서에는 개인 절대 경로·현재 계정 설정·원본 에피소드 ID·원본 월드 관측을 옮기지 않는다.
-버그 설명에 필요한 수치나 합성 좌표는 남길 수 있다. 실제 API 키 대신 명확한 placeholder를 사용한다.
-
-## 직접 Commit/Push하기 전 확인
+## Commit/Push 전 확인
 
 ```powershell
 git status --short
@@ -27,12 +16,6 @@ git diff --cached --stat
 git diff --cached
 ```
 
-.gitignore는 이미 추적된 파일을 제거하거나 이미 노출된 키를 무효화하지 않는다.
-파일을 선택해 스테이징한 뒤 최종 diff를 다시 확인한다. 이번 문서 정리는 기존 인덱스를 변경하지 않았다.
-AM 표시는 이미 staged인 파일을 추가로 수정했다는 뜻이므로 최신 수정까지 포함할지 확인해야 한다.
-원격 저장소와 과거 모든 이력에 대한 비밀 탐지는 이번 작업 범위에 포함하지 않았다.
-
-이번 문서 정리에서는 Git 추적 파일과 ignore되지 않은 새 파일에서 로컬 설정의 API 키·브리지 토큰과
-일치하는 문자열을 검사했고 발견하지 않았다. docs의 개인 사용자 경로·대표 키 패턴·원본 UUID도 발견하지 않았다.
-docker/.env와 원본 에피소드 복사본은 ignore 상태이며 문서의 로컬 링크도 확인했다.
-이는 모든 형식의 비밀을 보장하는 검사는 아니다. 스테이징 후 인덱스는 위 명령으로 별도 확인한다.
+파일을 선택해 스테이징하고 인덱스를 다시 확인한다. `.gitignore`는 이미 추적된 파일을 제거하거나 노출된 키를 무효화하지 않는다.
+AM은 staged 이후 추가 수정 상태다. 링크·ignore·비밀값 검사는 실행 범위와 결과를 구분해 기록하며,
+과거의 검사 성공을 현재 변경이나 저장소 전체 이력의 비밀 부재 증거로 재사용하지 않는다.

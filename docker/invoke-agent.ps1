@@ -73,7 +73,12 @@ if ($Operation -eq 'move-hotbar') {
     $url = 'http://127.0.0.1:8000/v1/skills'
     if ($Operation -eq 'skill-check') { $url += "/$SkillId/check" }
     if ($Operation -eq 'skill-run') {
-        $body = @{version=$SkillVersion; inputs=@{max_actions=$MaxActions}} | ConvertTo-Json -Depth 5
+        $inputs = [ordered]@{max_actions=$MaxActions}
+        if ($SkillId -eq 'craft_tool') {
+            $inputs['recipe'] = $Recipe
+            $inputs['slot'] = $Slot
+        }
+        $body = @{version=$SkillVersion; inputs=$inputs} | ConvertTo-Json -Depth 5
         Invoke-RestMethod "$url/$SkillId/run" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 90 | ConvertTo-Json -Depth 30
     } else {
         Invoke-RestMethod $url -Headers $headers -TimeoutSec 10 | ConvertTo-Json -Depth 20

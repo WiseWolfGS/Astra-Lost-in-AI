@@ -30,10 +30,8 @@ HTTP 200은 요청 처리 완료이며 목표 달성을 뜻하지 않는다.
 
 ## 검증
 
-Fabric 빌드와 Java 20개 테스트가 통과했다. 새 5개는 잎 접촉, 실제 충돌 유지,
-조기 방향 전환 방지, 모서리 및 직각 경로의 감속 시뮬레이션을 검사한다.
-시뮬레이션은 잔디 지면의 가속·마찰 근사이며 전체 게임 물리를 대체하지 않는다.
-Python 56개 테스트가 통과했으며 높이 후보와 상세 실패 이유 보존을 검증했다.
+과거 합성 회귀는 잎 접촉·실제 충돌 유지·조기 회전 방지·모서리/직각 경로 감속과 원목 높이·실패 이유 보존을 검사했다.
+지면 가속·마찰 시뮬레이션은 전체 게임 물리를 대체하지 않는다. 최신 자동 시험 수는 [진행 상태](PROGRESS.md)를 따른다.
 
 모델 호출 없이 실제 서바이벌 테스트 월드에서 다음을 확인했다.
 
@@ -48,11 +46,5 @@ Python 56개 테스트가 통과했으며 높이 후보와 상세 실패 이유 
 
 ## 재확인
 
-Docker 소스 폴더에서:
-
-```powershell
-.\invoke-agent.ps1 -Operation wood
-```
-
-평지의 원목/드롭 근처에서 실행하고 result.reason=log_inventory_increased 및 inventoryDelta>=1을 확인한다.
-실패하면 result.actionReason과 safetyFailure로 실제 경로 제한인지 확인한다.
+[원목 목표 시험](WOOD_GOAL.md)에서 log_inventory_increased와 inventoryDelta>=1을 확인한다.
+실패 시 actionReason/safetyFailure로 실제 경로 제한을 구분한다.

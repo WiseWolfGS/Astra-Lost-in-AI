@@ -31,21 +31,14 @@ Python의 대체 후보 선택과 Fabric의 동일 대상 정지 위치 재탐�
 
 ## 검증
 
-Fabric build와 Java 27개 테스트, Python 88개, Node 18개, 격리 연결·취소 시험을 통과했다.
+과거 합성 회귀와 격리 연결·취소 시험을 통과했다. 최신 결과는 [진행 상태](PROGRESS.md)를 따른다.
 합성 테스트는 머리 위 장애물 아래 드롭, 차단된 경로 유지, 반경 상한, 다른 후보 선택,
 예산 소진, 대체 후보 부재, 두 번째 거절, 체력 감소 및 재시도 금지 상태를 다룬다.
 유료 모델 호출은 없었다. Docker 에이전트는 운영 docker/.env를 사용하며 새 모드 적용에는 게임 재시작이 필요하다.
 
 ## 사용자 실게임 확인
 
-월드를 저장하고 Minecraft를 정상 종료한 다음 저장소 루트에서 실행한다.
-
-```powershell
-.\scripts\dev.ps1 -Task runClient
-```
-
-테스트 월드에서 메뉴를 닫고 F3+P로 포커스 상실 일시정지를 해제한다.
-남은 원목 아래의 드롭이 여전히 있다면 먼저 collect를 실행한다. 없으면 평지 나무 주변에서 스킬을 실행한다.
+[공통 준비](README.md) 후 남은 원목 아래 드롭 또는 평지 나무 주변에서 실행한다.
 
 ```powershell
 .\docker\invoke-agent.ps1 -Operation collect -Item minecraft:oak_log
